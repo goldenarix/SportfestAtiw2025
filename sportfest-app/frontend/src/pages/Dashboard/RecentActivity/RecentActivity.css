@@ -1,0 +1,75 @@
+.recent-activity {
+    width: 100%;
+  }
+  
+  .activity-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  
+  .activity-item {
+    display: flex;
+    padding: var(--spacing-sm) 0;
+    border-bottom: 1px solid var(--border-light);
+  }
+  
+  .activity-item:last-child {
+    border-bottom: none;
+  }
+  
+  .activity-icon {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: rgba(59, 130, 246, 0.1);
+    color: var(--primary);
+    margin-right: var(--spacing-md);
+  }
+  
+  .activity-content {
+    flex: 1;
+  }
+  
+  .activity-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-xs);
+  }
+  
+  .activity-name {
+    font-weight: 500;
+  }
+  
+  .activity-time {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+  }
+  
+  .activity-detail {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.875rem;
+  }
+  
+  .activity-station {
+    color: var(--text-secondary);
+  }
+  
+  .activity-score {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  
+  .empty-activity {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 150px;
+    color: var(--text-tertiary);
+    text-align: center;
+  }

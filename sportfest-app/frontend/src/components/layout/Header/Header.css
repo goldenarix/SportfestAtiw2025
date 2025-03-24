@@ -1,0 +1,230 @@
+.header {
+    background-color: var(--bg-light);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    transition: all var(--transition-normal);
+    height: 64px;
+  }
+  
+  .header.scrolled {
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  }
+  
+  .header-container {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--spacing-md);
+  }
+  
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+  }
+  
+  .menu-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-primary);
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    transition: background-color var(--transition-fast);
+  }
+  
+  .menu-toggle:hover {
+    background-color: var(--bg-light-hover);
+  }
+  
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 1.25rem;
+  }
+  
+  .logo svg {
+    color: var(--primary);
+  }
+  
+  .logo-text {
+    display: none;
+  }
+  
+  @media (min-width: 640px) {
+    .logo-text {
+      display: block;
+    }
+  }
+  
+  .page-title {
+    margin-left: var(--spacing-md);
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0;
+    display: none;
+  }
+  
+  @media (min-width: 768px) {
+    .page-title {
+      display: block;
+    }
+  }
+  
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+  }
+  
+  .action-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    transition: background-color var(--transition-fast), color var(--transition-fast);
+  }
+  
+  .action-button:hover {
+    background-color: var(--bg-light-hover);
+    color: var(--text-primary);
+  }
+  
+  .user-dropdown {
+    position: relative;
+  }
+  
+  .user-button {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    background: none;
+    border: none;
+    padding: var(--spacing-sm);
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    transition: background-color var(--transition-fast);
+  }
+  
+  .user-button:hover {
+    background-color: var(--bg-light-hover);
+  }
+  
+  .user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: var(--primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+  }
+  
+  .user-name {
+    font-weight: 500;
+    margin-bottom: 0;
+  }
+  
+  .user-email {
+    font-size: 0.875rem;
+    color: var(--text-tertiary);
+    margin-bottom: 0;
+  }
+  
+  .dropdown-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    background-color: var(--bg-light);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    width: 260px;
+    border: 1px solid var(--border-light);
+    animation: fadeIn 0.2s ease;
+    z-index: 10;
+  }
+  
+  .dropdown-header {
+    padding: var(--spacing-md);
+    display: flex;
+    gap: var(--spacing-md);
+    align-items: center;
+  }
+  
+  .user-info {
+    flex: 1;
+    overflow: hidden;
+  }
+  
+  .user-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .user-email {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .dropdown-divider {
+    height: 1px;
+    background-color: var(--border-light);
+    margin: 0;
+  }
+  
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    color: var(--text-primary);
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+  }
+  
+  .dropdown-item:hover {
+    background-color: var(--bg-light-hover);
+  }
+  
+  .dropdown-item svg {
+    color: var(--text-tertiary);
+  }
+  
+  /* Dropdown backdrop for closing when clicking outside */
+  .dropdown-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 5;
+  }
+  
+  .text-error {
+    color: var(--error);
+  }
+  
+  .text-error svg {
+    color: var(--error);
+  }

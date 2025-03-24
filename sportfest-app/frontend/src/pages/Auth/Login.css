@@ -1,0 +1,114 @@
+.login-page {
+    display: flex;
+    min-height: 100vh;
+    background-color: var(--bg-light);
+  }
+  
+  .login-container {
+    flex: 1;
+    padding: var(--spacing-xl);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  
+  .login-image {
+    display: none;
+    flex: 1;
+    background-image: url('/images/sport-bg.jpg');
+    background-size: cover;
+    background-position: center;
+    position: relative;
+  }
+  
+  @media (min-width: 1024px) {
+    .login-image {
+      display: block;
+    }
+  }
+  
+  .image-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.3));
+    color: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: var(--spacing-2xl);
+  }
+  
+  .image-overlay h2 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: var(--spacing-md);
+  }
+  
+  .image-overlay p {
+    font-size: 1.25rem;
+    max-width: 400px;
+  }
+  
+  .login-header {
+    text-align: center;
+    margin-bottom: var(--spacing-xl);
+  }
+  
+  .app-logo {
+    display: flex;
+    justify-content: center;
+    margin-bottom: var(--spacing-md);
+  }
+  
+  .app-logo svg {
+    color: var(--primary);
+  }
+  
+  .login-header h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin-bottom: var(--spacing-sm);
+  }
+  
+  .login-header p {
+    color: var(--text-secondary);
+    margin-bottom: 0;
+  }
+  
+  .login-form {
+    margin-bottom: var(--spacing-xl);
+  }
+  
+  .password-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-sm);
+  }
+  
+  .forgot-password {
+    font-size: 0.875rem;
+  }
+  
+  .remember-me {
+    margin: var(--spacing-md) 0;
+  }
+  
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+  }
+  
+  .login-footer {
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: 0.875rem;
+    border-top: 1px solid var(--border-light);
+    padding-top: var(--spacing-md);
+  }

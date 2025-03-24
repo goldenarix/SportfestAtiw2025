@@ -1,0 +1,22 @@
+.score-entry-form {
+    background-color: var(--bg-light);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    border: 1px solid var(--border-light);
+  }
+  
+  .score-hint {
+    font-size: 0.875rem;
+    color: var(--text-tertiary);
+    font-weight: normal;
+  }
+  
+  .alert {
+    margin-bottom: var(--spacing-md);
+  }
+  
+  .form-help {
+    font-size: 0.875rem;
+    color: var(--text-tertiary);
+    margin-top: 0.25rem;
+  }

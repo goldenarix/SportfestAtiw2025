@@ -1,0 +1,177 @@
+.scoreboard-page {
+    animation: fadeIn 0.5s ease;
+  }
+  
+  .page-header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+  }
+  
+  @media (min-width: 768px) {
+    .page-header {
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+    }
+  }
+  
+  .view-tabs {
+    display: flex;
+    background-color: var(--bg-light-active);
+    border-radius: var(--radius-md);
+    padding: 2px;
+  }
+  
+  .tab-button {
+    border: none;
+    background: none;
+    padding: var(--spacing-sm) var(--spacing-md);
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    transition: all var(--transition-fast);
+  }
+  
+  .tab-button.active {
+    background-color: var(--bg-light);
+    color: var(--primary);
+    box-shadow: var(--shadow-sm);
+  }
+  
+  .scoreboard-container {
+    background-color: white;
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: var(--spacing-lg);
+  }
+  
+  .rankings-table-container {
+    overflow-x: auto;
+  }
+  
+  .rankings-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  .rankings-table th,
+  .rankings-table td {
+    padding: var(--spacing-md);
+    text-align: left;
+    border-bottom: 1px solid var(--border-light);
+  }
+  
+  .rankings-table th {
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+  }
+  
+  .rankings-table tr:last-child td {
+    border-bottom: none;
+  }
+  
+  .rankings-table tr:hover {
+    background-color: var(--bg-light-hover);
+  }
+  
+  .rank-column {
+    width: 60px;
+    text-align: center;
+  }
+  
+  .numeric-column {
+    text-align: right;
+  }
+  
+  .points-column {
+    font-weight: 600;
+    color: var(--primary);
+  }
+  
+  .rank-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-size: 0.875rem;
+    font-weight: 600;
+    background-color: var(--bg-light-active);
+    color: var(--text-secondary);
+  }
+  
+  .rank-1 {
+    background-color: gold;
+    color: #333;
+  }
+  
+  .rank-2 {
+    background-color: silver;
+    color: #333;
+  }
+  
+  .rank-3 {
+    background-color: #cd7f32; /* bronze */
+    color: white;
+  }
+  
+  .empty-scoreboard {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-2xl) var(--spacing-md);
+    text-align: center;
+  }
+  
+  .empty-state-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background-color: rgba(59, 130, 246, 0.1);
+    color: var(--primary);
+    margin-bottom: var(--spacing-md);
+  }
+  
+  .empty-scoreboard h2 {
+    margin-bottom: var(--spacing-sm);
+  }
+  
+  .empty-scoreboard p {
+    color: var(--text-secondary);
+  }
+  
+  .scoreboard-footer {
+    background-color: white;
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    box-shadow: var(--shadow-sm);
+  }
+  
+  .point-calculation-info h3 {
+    font-size: 1.25rem;
+    margin-bottom: var(--spacing-md);
+  }
+  
+  .point-calculation-info p {
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-md);
+  }
+  
+  .point-calculation-info ul {
+    margin-bottom: var(--spacing-md);
+    padding-left: 1.5rem;
+  }
+  
+  .point-calculation-info li {
+    margin-bottom: var(--spacing-sm);
+    color: var(--text-secondary);
+  }
