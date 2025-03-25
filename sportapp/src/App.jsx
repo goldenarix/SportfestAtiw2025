@@ -3,6 +3,7 @@ import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import UltraModernLayout from './components/Layout';
+import TestPage from './pages/TestPage';
 
 // Lazy-loaded components for better performance
 const UltraModernDashboard = lazy(() => import('./components/Dashboard'));
@@ -13,6 +14,9 @@ const LeaderboardPage = lazy(() => import('./pages/LeaderboardPage'));
 const StatisticsPage = lazy(() => import('./pages/StatisticsPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const ScoreEntryPage = lazy(() => import('./pages/ScoreEntryPage'));
+//const TestPage = lazy(() => import('./pages/TestPage'));
+const DisziplinenPage = lazy(() => import('./pages/DisziplinenPage'));
+const ErgebnissePage = lazy(() => import('./pages/ErgebnissePage'));
 
 // Loading component
 const PageLoader = () => (
@@ -70,6 +74,22 @@ const AnimatedRoutes = () => {
           <Route path="settings" element={
             <Suspense fallback={<PageLoader />}>
               <SettingsPage />
+            </Suspense>
+          } />
+          {/* Add the TestPage route here */}
+          <Route path="test-db" element={
+            <Suspense fallback={<PageLoader />}>
+              <TestPage />
+            </Suspense>
+          } />
+          <Route path="disziplinen" element={
+            <Suspense fallback={<PageLoader />}>
+              <DisziplinenPage />
+            </Suspense>
+          } />
+          <Route path="ergebnisse" element={
+            <Suspense fallback={<PageLoader />}>
+              <ErgebnissePage />
             </Suspense>
           } />
           <Route path="*" element={<Navigate to="/" />} />
