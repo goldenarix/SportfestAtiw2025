@@ -1,0 +1,416 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Orbitron:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: rgb(79, 70, 229);
+  --primary-light: rgb(99, 102, 241);
+  --primary-dark: rgb(67, 56, 202);
+  --scanner-line-color: rgba(99, 102, 241, 0.8);
+  --scanner-line-height: 2px;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply font-body antialiased text-slate-900 dark:text-slate-100 transition-colors duration-300;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+  
+  /* Better focus styles */
+  :focus-visible {
+    @apply outline-none ring-2 ring-indigo-500 ring-offset-2 ring-offset-white dark:ring-offset-slate-900;
+  }
+  
+  /* Smooth transitions for all elements */
+  * {
+    @apply transition-colors duration-200;
+  }
+}
+
+/* Futuristic Hologram Scanline */
+.holographic-scanner {
+  position: absolute;
+  height: var(--scanner-line-height);
+  background: linear-gradient(to right, transparent, var(--scanner-line-color), transparent);
+  box-shadow: 0 0 8px 1px var(--scanner-line-color);
+  opacity: 0.5;
+  transform: translateY(-50%);
+  animation: scanner-horizontal 4s linear infinite;
+}
+
+.holographic-scanner-vertical {
+  position: absolute;
+  width: var(--scanner-line-height);
+  height: 100%;
+  background: linear-gradient(to bottom, transparent, var(--scanner-line-color), transparent);
+  box-shadow: 0 0 8px 1px var(--scanner-line-color);
+  opacity: 0.5;
+  transform: translateX(-50%);
+  animation: scanner-vertical 4s linear infinite;
+}
+
+.holographic-grid {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(to right, rgba(99, 102, 241, 0.1) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(99, 102, 241, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+  mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
+}
+
+/* Scanner Animations */
+@keyframes scanner-horizontal {
+  0% {
+    top: 0%;
+  }
+  100% {
+    top: 100%;
+  }
+}
+
+@keyframes scanner-horizontal-reverse {
+  0% {
+    top: 100%;
+  }
+  100% {
+    top: 0%;
+  }
+}
+
+@keyframes scanner-vertical {
+  0% {
+    left: 0%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* Glowing Effects */
+.glow-sm {
+  box-shadow: 0 0 5px currentColor;
+}
+
+.glow-md {
+  box-shadow: 0 0 10px currentColor;
+}
+
+.glow-lg {
+  box-shadow: 0 0 15px currentColor;
+}
+
+.glow-text {
+  text-shadow: 0 0 5px currentColor;
+}
+
+/* Cyberpunk Grid Pattern */
+.bg-grid-pattern {
+  background-image: 
+    linear-gradient(to right, rgba(99, 102, 241, 0.1) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(99, 102, 241, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Animated Backgrounds */
+.animated-gradient {
+  background: linear-gradient(-45deg, #4f46e5, #8b5cf6, #ec4899, #3b82f6);
+  background-size: 400% 400%;
+  animation: gradient 15s ease infinite;
+}
+
+@keyframes gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Pulse Animation */
+.pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Fancy Animations */
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out forwards;
+}
+
+.animate-slide-in {
+  animation: slide-in 0.5s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.3s ease-out forwards;
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+.animate-blob {
+  animation: blob 7s infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+/* Animation Keyframes */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes blob {
+  0% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  33% {
+    transform: translate(30px, -50px) scale(1.1);
+  }
+  66% {
+    transform: translate(-20px, 20px) scale(0.9);
+  }
+  100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+}
+
+/* Gradient Border Animation */
+.animate-gradient-border {
+  animation: gradient-border 3s ease infinite;
+}
+
+@keyframes gradient-border {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* Cyberpunk Button */
+.cyberpunk-button {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.cyberpunk-button:before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  transition: all 0.6s ease;
+}
+
+.cyberpunk-button:hover:before {
+  left: 100%;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(99, 102, 241, 0.3);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(99, 102, 241, 0.5);
+}
+
+/* Hide scrollbar but keep functionality */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* 3D card effect */
+.card-3d-effect {
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+
+/* Neon text effect */
+.neon-text {
+  text-shadow: 0 0 5px var(--primary-light),
+               0 0 10px var(--primary-light),
+               0 0 20px var(--primary);
+}
+
+/* Glassmorphism effect */
+.glassmorphism {
+  @apply bg-white/60 dark:bg-slate-900/60 backdrop-blur-md border border-white/20 dark:border-slate-700/20;
+}
+
+/* Chrome-like tab indicator */
+.tab-indicator {
+  position: relative;
+}
+
+.tab-indicator::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--primary);
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+}
+
+.tab-indicator.active::after {
+  transform: scaleX(1);
+}
+
+/* Modern button styles */
+.btn-modern {
+  @apply relative overflow-hidden rounded-lg transition-all duration-300;
+}
+
+.btn-modern::before {
+  @apply absolute inset-0 opacity-0 transition-opacity duration-300;
+  content: '';
+  background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+}
+
+.btn-modern:hover::before {
+  @apply opacity-100;
+  animation: btn-shine 1.5s ease-in-out;
+}
+
+@keyframes btn-shine {
+  from {
+    left: -100%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .responsive-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .responsive-sidebar {
+    @apply fixed top-0 left-0 z-50 -translate-x-full;
+    transition: transform 0.3s ease;
+    width: 100%;
+    max-width: 280px;
+    height: 100vh;
+  }
+  
+  .responsive-sidebar.open {
+    @apply translate-x-0;
+  }
+}
+
+/* Dark mode specific adjustments */
+.dark .glassmorphism {
+  @apply bg-slate-900/60 border-slate-700/20;
+}
+
+.dark .glow-sm {
+  box-shadow: 0 0 5px rgba(99, 102, 241, 0.7);
+}
+
+.dark .glow-md {
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.7);
+}
+
+.dark .glow-lg {
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.7);
+}

@@ -1,0 +1,283 @@
+/* Futuristic Loading and Onboarding Effects */
+
+/* Additional animations */
+@keyframes spin-slow {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  
+  @keyframes spin-reverse-slow {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(-360deg);
+    }
+  }
+  
+  @keyframes shimmer {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+  
+  @keyframes scan-vertical {
+    0% {
+      top: 0;
+    }
+    100% {
+      top: 100%;
+    }
+  }
+  
+  @keyframes text-slide {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-20%);
+    }
+  }
+  
+  /* Hologram effect */
+  .holographic-grid {
+    background-image: 
+      linear-gradient(to right, rgba(99, 102, 241, 0.15) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(99, 102, 241, 0.15) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  
+  /* Scanner animations */
+  .holographic-scanner {
+    position: absolute;
+    height: 2px;
+    background: linear-gradient(to right, transparent, rgba(99, 102, 241, 0.8), transparent);
+    box-shadow: 0 0 8px 1px rgba(99, 102, 241, 0.7);
+    opacity: 0.7;
+    transform: translateY(-50%);
+    animation: scan-vertical 4s linear infinite;
+  }
+  
+  /* Neon effects */
+  .shadow-glow-blue {
+    box-shadow: 0 0 10px #00f9ff, 0 0 20px rgba(0, 249, 255, 0.3);
+  }
+  
+  .shadow-glow-purple {
+    box-shadow: 0 0 10px #8a2be2, 0 0 20px rgba(138, 43, 226, 0.3);
+  }
+  
+  .shadow-glow-pink {
+    box-shadow: 0 0 10px #ff00ff, 0 0 20px rgba(255, 0, 255, 0.3);
+  }
+  
+  /* Cyberpunk text effect */
+  .cyberpunk-text {
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    position: relative;
+    display: inline-block;
+  }
+  
+  .cyberpunk-text::before {
+    content: attr(data-text);
+    position: absolute;
+    left: 0.05em;
+    text-shadow: -0.05em 0 #ff00ff;
+    top: 0;
+    color: transparent;
+    overflow: hidden;
+    clip: rect(0, 900px, 0, 0);
+    animation: glitch-anim 5s ease-in-out infinite alternate;
+  }
+  
+  @keyframes glitch-anim {
+    0% {
+      clip: rect(0, 900px, 0, 0);
+    }
+    4% {
+      clip: rect(0, 900px, 5px, 0);
+    }
+    8% {
+      clip: rect(0, 900px, 0, 0);
+    }
+    12% {
+      clip: rect(0, 900px, 7px, 0);
+    }
+    16% {
+      clip: rect(0, 900px, 0, 0);
+    }
+    95% {
+      clip: rect(0, 900px, 0, 0);
+    }
+    99% {
+      clip: rect(0, 900px, 3px, 0);
+    }
+    100% {
+      clip: rect(0, 900px, 0, 0);
+    }
+  }
+  
+  /* Rotating 3D Cube */
+  .cube-container {
+    perspective: 800px;
+    width: 100px;
+    height: 100px;
+  }
+  
+  .cube {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    animation: rotate 20s infinite linear;
+  }
+  
+  @keyframes rotate {
+    0% {
+      transform: rotateX(0deg) rotateY(0deg);
+    }
+    100% {
+      transform: rotateX(360deg) rotateY(360deg);
+    }
+  }
+  
+  .cube-face {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    backface-visibility: visible;
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.2) inset;
+  }
+  
+  .front  { transform: rotateY(0deg) translateZ(50px); }
+  .back   { transform: rotateY(180deg) translateZ(50px); }
+  .right  { transform: rotateY(90deg) translateZ(50px); }
+  .left   { transform: rotateY(-90deg) translateZ(50px); }
+  .top    { transform: rotateX(90deg) translateZ(50px); }
+  .bottom { transform: rotateX(-90deg) translateZ(50px); }
+  
+  /* Pulse effect */
+  .animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  .animate-spin-slow {
+    animation: spin-slow 10s linear infinite;
+  }
+  
+  .animate-spin-reverse-slow {
+    animation: spin-reverse-slow 15s linear infinite;
+  }
+  
+  .animate-shimmer {
+    animation: shimmer 2s infinite;
+  }
+  
+  .animate-text-slide {
+    animation: text-slide 20s linear infinite;
+  }
+  
+  /* Glowing effects for neon colors */
+  .text-neon-blue {
+    color: #00f9ff;
+    text-shadow: 0 0 5px rgba(0, 249, 255, 0.7);
+  }
+  
+  .text-neon-purple {
+    color: #8a2be2;
+    text-shadow: 0 0 5px rgba(138, 43, 226, 0.7);
+  }
+  
+  .text-neon-pink {
+    color: #ff00ff;
+    text-shadow: 0 0 5px rgba(255, 0, 255, 0.7);
+  }
+  
+  .text-neon-green {
+    color: #00ff9f;
+    text-shadow: 0 0 5px rgba(0, 255, 159, 0.7);
+  }
+  
+  .bg-neon-blue {
+    background-color: #00f9ff;
+    box-shadow: 0 0 10px rgba(0, 249, 255, 0.7);
+  }
+  
+  .bg-neon-purple {
+    background-color: #8a2be2;
+    box-shadow: 0 0 10px rgba(138, 43, 226, 0.7);
+  }
+  
+  .bg-neon-pink {
+    background-color: #ff00ff;
+    box-shadow: 0 0 10px rgba(255, 0, 255, 0.7);
+  }
+  
+  .bg-neon-green {
+    background-color: #00ff9f;
+    box-shadow: 0 0 10px rgba(0, 255, 159, 0.7);
+  }
+  
+  /* Frosted glass effect for backgrounds */
+  .frosted-glass {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .dark .frosted-glass {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  
+  /* Custom scrollbar for the onboarding interface */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(99, 102, 241, 0.3);
+    border-radius: 3px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(99, 102, 241, 0.5);
+  }
+  
+  /* Mobile responsiveness for onboarding */
+  @media (max-width: 640px) {
+    .cube-container {
+      width: 80px;
+      height: 80px;
+    }
+    
+    .front, .back, .right, .left, .top, .bottom {
+      transform-origin: center;
+    }
+    
+    .front  { transform: rotateY(0deg) translateZ(40px); }
+    .back   { transform: rotateY(180deg) translateZ(40px); }
+    .right  { transform: rotateY(90deg) translateZ(40px); }
+    .left   { transform: rotateY(-90deg) translateZ(40px); }
+    .top    { transform: rotateX(90deg) translateZ(40px); }
+    .bottom { transform: rotateX(-90deg) translateZ(40px); }
+  }
