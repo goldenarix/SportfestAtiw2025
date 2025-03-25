@@ -58,7 +58,11 @@ async function executeQuery(query, params = [], options = {}) {
   }
 }
 
-// BETREUER table operations
+
+
+
+
+// BETREUER table operations mit manueller ID-Generierung
 const BetreuerController = {
   // Get all betreuer
   getAll: async () => {
@@ -81,51 +85,195 @@ const BetreuerController = {
     );
   },
   
-  // Create new betreuer
+  // Create new betreuer with debugging and manual ID
   create: async (betreuer) => {
+    let connection;
+    
     try {
-      const result = await executeQuery(
-        `INSERT INTO Betreuer (NAME, PASSWORT) 
-         VALUES (:name, :passwort)
-         RETURNING BETREUERID INTO :id`,
-        {
-          name: betreuer.name,
-          passwort: betreuer.passwort,
-          id: { type: oracledb.NUMBER, dir: oracledb.BIND_OUT }
-        },
+      console.log('Creating new Betreuer with data:', betreuer);
+      
+      // Get connection directly for better control
+      connection = await oracledb.getConnection('appPool');
+      
+      // 1. Get next ID from max ID in table
+      const getMaxIdResult = await connection.execute(
+        'SELECT NVL(MAX(BETREUERID), 0) + 1 as NEXT_ID FROM Betreuer',
+        [],
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      
+      const nextId = getMaxIdResult.rows[0].NEXT_ID;
+      console.log('Next Betreuer ID:', nextId);
+      
+      // 2. Insert with explicit ID
+      const insertQuery = `INSERT INTO Betreuer (BETREUERID, NAME, PASSWORT) 
+                           VALUES (:id, :name, :passwort)`;
+      
+      console.log('Insert query:', insertQuery);
+      
+      // Ensure we have values for required fields
+      const name = betreuer.NAME || betreuer.name || 'Neuer Betreuer';
+      const passwort = betreuer.PASSWORT || betreuer.passwort || 'password123';
+      
+      const binds = {
+        id: nextId,
+        name: name,
+        passwort: passwort
+      };
+      
+      console.log('Binds:', binds);
+      
+      const insertResult = await connection.execute(
+        insertQuery,
+        binds,
         { autoCommit: true }
       );
-      return { success: true, id: result.outBinds?.id?.[0] };
+      
+      console.log('Insert result:', insertResult);
+      
+      return { 
+        success: true, 
+        id: nextId,
+        rowsAffected: insertResult.rowsAffected
+      };
     } catch (err) {
+      console.error('Error creating Betreuer:', err);
       return { success: false, error: err.message };
+    } finally {
+      if (connection) {
+        try {
+          await connection.close();
+        } catch (err) {
+          console.error('Error closing connection:', err);
+        }
+      }
     }
   },
   
-  // Update betreuer
+  // Update betreuer with debugging
   update: async (id, betreuer) => {
-    return await executeQuery(
-      `UPDATE Betreuer 
-       SET NAME = :name, 
-           PASSWORT = :passwort
-       WHERE BETREUERID = :id`,
-      {
-        name: betreuer.name,
-        passwort: betreuer.passwort,
-        id: id
-      },
-      { autoCommit: true }
-    );
+    console.log('Updating Betreuer:', id, betreuer);
+    
+    let connection;
+    
+    try {
+      // Get connection directly for better control
+      connection = await oracledb.getConnection('appPool');
+      
+      // Build dynamic SET clause based on provided fields
+      let setClauses = [];
+      let binds = { id: id };
+      
+      // Handle both uppercase and lowercase field names for flexibility
+      if (betreuer.NAME !== undefined || betreuer.name !== undefined) {
+        setClauses.push('NAME = :name');
+        binds.name = betreuer.NAME || betreuer.name;
+      }
+      
+      if (betreuer.PASSWORT !== undefined || betreuer.passwort !== undefined) {
+        setClauses.push('PASSWORT = :passwort');
+        binds.passwort = betreuer.PASSWORT || betreuer.passwort;
+      }
+      
+      // Return early if no fields to update
+      if (setClauses.length === 0) {
+        console.log('No fields to update');
+        return { success: false, error: 'No fields to update' };
+      }
+      
+      // Construct the final UPDATE query
+      const query = `UPDATE Betreuer SET ${setClauses.join(', ')} WHERE BETREUERID = :id`;
+      console.log('Update query:', query);
+      console.log('Binds:', binds);
+      
+      const updateResult = await connection.execute(
+        query,
+        binds,
+        { autoCommit: true }
+      );
+      
+      console.log('Update result:', updateResult);
+      
+      return { 
+        success: true, 
+        rowsAffected: updateResult.rowsAffected
+      };
+    } catch (err) {
+      console.error('Error updating Betreuer:', err);
+      return { success: false, error: err.message };
+    } finally {
+      if (connection) {
+        try {
+          await connection.close();
+        } catch (err) {
+          console.error('Error closing connection:', err);
+        }
+      }
+    }
   },
   
-  // Delete betreuer
+  // Delete betreuer with cascade check
   delete: async (id) => {
-    return await executeQuery(
-      'DELETE FROM Betreuer WHERE BETREUERID = :id',
-      [id],
-      { autoCommit: true }
-    );
+    console.log('Deleting Betreuer with ID:', id);
+    
+    let connection;
+    
+    try {
+      connection = await oracledb.getConnection('appPool');
+      
+      // First check if there are related teams
+      const checkTeamsResult = await connection.execute(
+        'SELECT COUNT(*) as COUNT FROM Team WHERE BETREUERID = :id',
+        [id],
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      
+      const count = checkTeamsResult.rows[0].COUNT;
+      console.log(`Found ${count} related Team records`);
+      
+      if (count > 0) {
+        // If there are related teams, you may want to prevent deletion
+        // or implement a cascade delete strategy
+        console.log('Cannot delete Betreuer with related Teams');
+        return { 
+          success: false, 
+          error: 'Cannot delete a Betreuer that has related Teams. Update or delete the Teams first.' 
+        };
+      }
+      
+      // If no related teams, delete the betreuer
+      const deleteResult = await connection.execute(
+        'DELETE FROM Betreuer WHERE BETREUERID = :id',
+        [id],
+        { autoCommit: true }
+      );
+      
+      console.log(`Deleted ${deleteResult.rowsAffected} Betreuer records`);
+      
+      return { 
+        success: true, 
+        rowsDeleted: deleteResult.rowsAffected
+      };
+    } catch (err) {
+      console.error('Error deleting Betreuer:', err);
+      return { success: false, error: err.message };
+    } finally {
+      if (connection) {
+        try {
+          await connection.close();
+        } catch (err) {
+          console.error('Error closing connection:', err);
+        }
+      }
+    }
   }
 };
+
+
+
+
+
+
 
 
 // TEAM table operations mit Debugging und ID-Sequenz
