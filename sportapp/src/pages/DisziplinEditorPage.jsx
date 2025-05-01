@@ -46,8 +46,9 @@ const DisziplinEditorPage = () => {
       
       try {
         setLoading(true);
-        const response = await fetch(`http://localhost:3001/api/disziplins/${id}`);
-        
+        const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/disziplins/${id}`);
+
+      
         if (!response.ok) {
           throw new Error(`HTTP error: ${response.status}`);
         }
@@ -92,8 +93,9 @@ const DisziplinEditorPage = () => {
       setSaving(true);
       
       const url = isEditMode 
-        ? `http://localhost:3001/api/disziplins/${id}` 
-        : 'http://localhost:3001/api/disziplins';
+      ? `${import.meta.env.VITE_API_URL || ''}/api/disziplins/${id}` 
+      : `${import.meta.env.VITE_API_URL || ''}/api/disziplins`;
+    
       
       const method = isEditMode ? 'PUT' : 'POST';
       

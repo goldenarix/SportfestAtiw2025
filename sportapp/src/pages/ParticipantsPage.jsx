@@ -114,37 +114,36 @@ const TeilnehmerPage = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      
-      // Fetch teams and betreuer in parallel
+  
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+  
       const [teamsResponse, betreuerResponse] = await Promise.all([
-        fetch('http://localhost:3001/api/teams'),
-        fetch('http://localhost:3001/api/betreuer')
+        fetch(`${baseUrl}/teams`),
+        fetch(`${baseUrl}/betreuer`)
       ]);
-      
-      // Check responses
+  
       if (!teamsResponse.ok || !betreuerResponse.ok) {
-        throw new Error('Failed to fetch data');
+        throw new Error(`Fehler beim Laden: ${teamsResponse.status} / ${betreuerResponse.status}`);
       }
-      
-      // Parse JSON
+  
       const teamsData = await teamsResponse.json();
       const betreuerData = await betreuerResponse.json();
-      
-      // Update state
+  
       if (teamsData.success && betreuerData.success) {
         setTeams(teamsData.data || []);
         setBetreuer(betreuerData.data || []);
         setError(null);
       } else {
-        throw new Error('API returned error');
+        throw new Error('API-Antwort fehlerhaft');
       }
     } catch (err) {
-      console.error('Error fetching data:', err);
-      setError(err.message);
+      console.error('Fehler beim Laden der Daten:', err);
+      setError(err.message || 'Unbekannter Fehler');
     } finally {
       setLoading(false);
     }
   };
+  
   
   // Handle team form input change
   const handleTeamFormChange = (e) => {
@@ -161,16 +160,18 @@ const TeilnehmerPage = () => {
   // Add team
   const handleAddTeam = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/teams', {
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+  
+      const response = await fetch(`${baseUrl}/teams`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(teamFormData),
       });
-      
+  
       const result = await response.json();
-      
+  
       if (result.success) {
         setNotification({
           type: 'success',
@@ -180,10 +181,10 @@ const TeilnehmerPage = () => {
         setShowAddTeamModal(false);
         resetTeamForm();
       } else {
-        throw new Error(result.error || 'Failed to add team');
+        throw new Error(result.error || 'Team konnte nicht hinzugefügt werden');
       }
     } catch (err) {
-      console.error('Error adding team:', err);
+      console.error('Fehler beim Hinzufügen des Teams:', err);
       setNotification({
         type: 'error',
         message: `Fehler: ${err.message}`
@@ -194,16 +195,18 @@ const TeilnehmerPage = () => {
   // Edit team
   const handleEditTeam = async () => {
     try {
-      const response = await fetch(`http://localhost:3001/api/teams/${currentTeam.TEAMID}`, {
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+  
+      const response = await fetch(`${baseUrl}/teams/${currentTeam.TEAMID}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(teamFormData),
       });
-      
+  
       const result = await response.json();
-      
+  
       if (result.success) {
         setNotification({
           type: 'success',
@@ -212,10 +215,10 @@ const TeilnehmerPage = () => {
         fetchData();
         setShowEditTeamModal(false);
       } else {
-        throw new Error(result.error || 'Failed to update team');
+        throw new Error(result.error || 'Team konnte nicht aktualisiert werden');
       }
     } catch (err) {
-      console.error('Error updating team:', err);
+      console.error('Fehler beim Aktualisieren des Teams:', err);
       setNotification({
         type: 'error',
         message: `Fehler: ${err.message}`
@@ -223,127 +226,135 @@ const TeilnehmerPage = () => {
     }
   };
   
-  // Delete team
-  const handleDeleteTeam = async () => {
-    try {
-      const response = await fetch(`http://localhost:3001/api/teams/${currentTeam.TEAMID}`, {
-        method: 'DELETE',
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        setNotification({
-          type: 'success',
-          message: 'Team erfolgreich gelöscht!'
-        });
-        fetchData();
-        setShowDeleteTeamModal(false);
-      } else {
-        throw new Error(result.error || 'Failed to delete team');
-      }
-    } catch (err) {
-      console.error('Error deleting team:', err);
-      setNotification({
-        type: 'error',
-        message: `Fehler: ${err.message}`
-      });
-    }
-  };
   
-  // Add betreuer
-  const handleAddBetreuer = async () => {
-    try {
-      const response = await fetch('http://localhost:3001/api/betreuer', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(betreuerFormData),
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        setNotification({
-          type: 'success',
-          message: 'Betreuer erfolgreich hinzugefügt!'
-        });
-        fetchData();
-        setShowAddBetreuerModal(false);
-        resetBetreuerForm();
-      } else {
-        throw new Error(result.error || 'Failed to add betreuer');
-      }
-    } catch (err) {
-      console.error('Error adding betreuer:', err);
+
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
+// Delete team
+const handleDeleteTeam = async () => {
+  try {
+    const response = await fetch(`${baseUrl}/teams/${currentTeam.TEAMID}`, {
+      method: 'DELETE',
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
       setNotification({
-        type: 'error',
-        message: `Fehler: ${err.message}`
+        type: 'success',
+        message: 'Team erfolgreich gelöscht!'
       });
+      fetchData();
+      setShowDeleteTeamModal(false);
+    } else {
+      throw new Error(result.error || 'Team konnte nicht gelöscht werden');
     }
-  };
-  
-  // Edit betreuer
-  const handleEditBetreuer = async () => {
-    try {
-      const response = await fetch(`http://localhost:3001/api/betreuer/${currentBetreuer.BETREUERID}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(betreuerFormData),
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        setNotification({
-          type: 'success',
-          message: 'Betreuer erfolgreich aktualisiert!'
-        });
-        fetchData();
-        setShowEditBetreuerModal(false);
-      } else {
-        throw new Error(result.error || 'Failed to update betreuer');
-      }
-    } catch (err) {
-      console.error('Error updating betreuer:', err);
+  } catch (err) {
+    console.error('Fehler beim Löschen des Teams:', err);
+    setNotification({
+      type: 'error',
+      message: `Fehler: ${err.message}`
+    });
+  }
+};
+
+// Add betreuer
+const handleAddBetreuer = async () => {
+  try {
+    const response = await fetch(`${baseUrl}/betreuer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(betreuerFormData),
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
       setNotification({
-        type: 'error',
-        message: `Fehler: ${err.message}`
+        type: 'success',
+        message: 'Betreuer erfolgreich hinzugefügt!'
       });
+      fetchData();
+      setShowAddBetreuerModal(false);
+      resetBetreuerForm();
+    } else {
+      throw new Error(result.error || 'Betreuer konnte nicht hinzugefügt werden');
     }
-  };
-  
-  // Delete betreuer
-  const handleDeleteBetreuer = async () => {
-    try {
-      const response = await fetch(`http://localhost:3001/api/betreuer/${currentBetreuer.BETREUERID}`, {
-        method: 'DELETE',
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        setNotification({
-          type: 'success',
-          message: 'Betreuer erfolgreich gelöscht!'
-        });
-        fetchData();
-        setShowDeleteBetreuerModal(false);
-      } else {
-        throw new Error(result.error || 'Failed to delete betreuer');
-      }
-    } catch (err) {
-      console.error('Error deleting betreuer:', err);
+  } catch (err) {
+    console.error('Fehler beim Hinzufügen des Betreuers:', err);
+    setNotification({
+      type: 'error',
+      message: `Fehler: ${err.message}`
+    });
+  }
+};
+
+// Edit betreuer
+const handleEditBetreuer = async () => {
+  try {
+    const response = await fetch(`${baseUrl}/betreuer/${currentBetreuer.BETREUERID}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(betreuerFormData),
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
       setNotification({
-        type: 'error',
-        message: `Fehler: ${err.message}`
+        type: 'success',
+        message: 'Betreuer erfolgreich aktualisiert!'
       });
+      fetchData();
+      setShowEditBetreuerModal(false);
+    } else {
+      throw new Error(result.error || 'Betreuer konnte nicht aktualisiert werden');
     }
-  };
-  
+  } catch (err) {
+    console.error('Fehler beim Aktualisieren des Betreuers:', err);
+    setNotification({
+      type: 'error',
+      message: `Fehler: ${err.message}`
+    });
+  }
+};
+
+// Delete betreuer
+const handleDeleteBetreuer = async () => {
+  try {
+    const response = await fetch(`${baseUrl}/betreuer/${currentBetreuer.BETREUERID}`, {
+      method: 'DELETE',
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      setNotification({
+        type: 'success',
+        message: 'Betreuer erfolgreich gelöscht!'
+      });
+      fetchData();
+      setShowDeleteBetreuerModal(false);
+    } else {
+      throw new Error(result.error || 'Betreuer konnte nicht gelöscht werden');
+    }
+  } catch (err) {
+    console.error('Fehler beim Löschen des Betreuers:', err);
+    setNotification({
+      type: 'error',
+      message: `Fehler: ${err.message}`
+    });
+  }
+};
+
+
+
+
+
   // Reset team form
   const resetTeamForm = () => {
     setTeamFormData({

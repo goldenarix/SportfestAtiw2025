@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useDataContext } from '../../backend/DataContext';
+import { useDataContext } from '../../backend/DataLoader';
 
 import { useParams, Link } from 'react-router-dom';
 import { 
@@ -45,19 +45,78 @@ const DisziplinDetailPage = () => {
   const [sortBy, setSortBy] = useState('points'); // 'points', 'name'
   const [sortOrder, setSortOrder] = useState('desc'); // 'asc', 'desc'
 
-  const { disziplins, ergebnisse, teams } = useDataContext();
+  // Local state for data if context is unavailable
+  const [disziplinsData, setDisziplinsData] = useState([]);
+  const [ergebnisseData, setErgebnisseData] = useState([]);
+  const [teamsData, setTeamsData] = useState([]);
 
+  // Try to use context if available
+  const contextData = useDataContext ? useDataContext() : null;
+
+  // Initialize data from context or fetch directly
+  useEffect(() => {
+    if (contextData) {
+      // If context is available, use its data
+      setDisziplinsData(contextData.disziplins || []);
+      setErgebnisseData(contextData.ergebnisse || []);
+      setTeamsData(contextData.teams || []);
+    } else {
+      // If context is unavailable, fetch data directly
+      fetchData();
+    }
+  }, [contextData]);
+
+  // Fetch data directly if context is unavailable
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      
+      // Example API calls - replace with your actual API endpoints
+      const [disziplinsRes, ergebnisseRes, teamsRes] = await Promise.all([
+        fetch(`${import.meta.env.VITE_API_URL || ''}/disziplins`),
+        fetch(`${import.meta.env.VITE_API_URL || ''}/ergebnisse`),
+        fetch(`${import.meta.env.VITE_API_URL || ''}/teams`)
+      ]);
+      
+      // Check for errors
+      if (!disziplinsRes.ok || !ergebnisseRes.ok || !teamsRes.ok) {
+        throw new Error(`HTTP error: ${disziplinsRes.status} / ${ergebnisseRes.status} / ${teamsRes.status}`);
+      }
+      
+      // Parse JSON responses
+      const disziplinsData = await disziplinsRes.json();
+      const ergebnisseData = await ergebnisseRes.json();
+      const teamsData = await teamsRes.json();
+      
+      // Update state if all requests were successful
+      if (disziplinsData.success && ergebnisseData.success && teamsData.success) {
+        setDisziplinsData(disziplinsData.data || []);
+        setErgebnisseData(ergebnisseData.data || []);
+        setTeamsData(teamsData.data || []);
+        setError(null);
+      } else {
+        throw new Error('One or more API requests failed');
+      }
+    } catch (err) {
+      console.error('Error fetching data:', err);
+      setError(err.message || 'Failed to fetch data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Process the disziplin and ergebnisse data when data changes or id changes
   useEffect(() => {
     setLoading(true);
   
     try {
-      const disziplin = disziplins.find(d => d.DISZIPLINID.toString() === id);
-      if (!disziplin) throw new Error('Disziplin nicht gefunden');
-      setDisziplin(disziplin);
+      const disziplinObj = disziplinsData.find(d => d && d.DISZIPLINID && d.DISZIPLINID.toString() === id);
+      if (!disziplinObj) throw new Error('Disziplin nicht gefunden');
+      setDisziplin(disziplinObj);
   
-      const relevantErgebnisse = ergebnisse.filter(e => e.DISZIPLINID.toString() === id);
+      const relevantErgebnisse = ergebnisseData.filter(e => e && e.DISZIPLINID && e.DISZIPLINID.toString() === id);
   
-      const teamMap = Object.fromEntries(teams.map(t => [t.TEAMID, t]));
+      const teamMap = Object.fromEntries(teamsData.map(t => t ? [t.TEAMID, t] : []));
       const enhancedErgebnisse = relevantErgebnisse.map(ergebnis => ({
         ...ergebnis,
         teamName: teamMap[ergebnis.TEAMID]?.NAME || `Team ${ergebnis.TEAMID}`,
@@ -68,11 +127,11 @@ const DisziplinDetailPage = () => {
       setError(null);
     } catch (err) {
       console.error('Error loading disziplin data:', err);
-      setError(err.message);
+      setError(err.message || 'Error processing discipline data');
     } finally {
       setLoading(false);
     }
-  }, [id, disziplins, ergebnisse, teams]);
+  }, [id, disziplinsData, ergebnisseData, teamsData]);
   
 
   // Sort and filter the results
@@ -89,6 +148,9 @@ const DisziplinDetailPage = () => {
     }
     return 0;
   });
+
+  // Get filtered results for rendering
+  const filteredErgebnisse = sortedResults;
 
   // Top 3 performers
   const topPerformers = sortedResults.slice(0, 3);
@@ -447,7 +509,7 @@ const DisziplinDetailPage = () => {
                         {result.teamName}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">
-                        {result.disziplinName}
+                        {disziplin?.NAME || 'Disziplin'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -492,7 +554,7 @@ const DisziplinDetailPage = () => {
                     </div>
                     <div>
                       <h3 className="font-medium text-slate-800 dark:text-white">{result.teamName}</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{result.disziplinName}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{disziplin?.NAME || 'Disziplin'}</p>
                     </div>
                   </div>
                   <div className="flex justify-between items-center">
@@ -516,6 +578,7 @@ const DisziplinDetailPage = () => {
   );
 };
 
+// Define these functions outside the component since they don't depend on component state
 const openEditModal = (result) => {
   // This would typically open an edit modal
   console.log('Edit result:', result);

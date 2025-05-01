@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useDataContext } from '../..backend/DataLoader';
+import { useDataContext } from '../../backend/DataLoader';
 import { 
   Trophy, 
   AlertTriangle, 
@@ -62,12 +62,15 @@ const backdropVariants = {
 };
 
 const ErgebnissePage = () => {
-  // State for data
+  // Initialize with local state instead of context
   const [ergebnisse, setErgebnisse] = useState([]);
   const [teams, setTeams] = useState([]);
   const [disziplinen, setDisziplinen] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // Try to use context if available
+  const contextData = useDataContext ? useDataContext() : null;
   
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
@@ -96,10 +99,26 @@ const ErgebnissePage = () => {
   // Notification state
   const [notification, setNotification] = useState(null);
 
-  // Fetch all required data
+  // Load data from context if available
   useEffect(() => {
-    fetchAllData();
-  }, []);
+    if (contextData) {
+      if (contextData.ergebnisse) setErgebnisse(contextData.ergebnisse);
+      if (contextData.teams) setTeams(contextData.teams);
+      if (contextData.disziplins) setDisziplinen(contextData.disziplins);
+      if (contextData.loading !== undefined) setLoading(contextData.loading);
+      if (contextData.error !== undefined) setError(contextData.error);
+    } else {
+      // If context is not available, fetch data directly
+      fetchAllData();
+    }
+  }, [contextData]);
+
+  // Initialize form data when teams and disciplines data is available
+  useEffect(() => {
+    if (teams.length > 0 && disziplinen.length > 0) {
+      resetForm();
+    }
+  }, [teams, disziplinen]);
 
   // Clear notification after 3 seconds
   useEffect(() => {
@@ -115,39 +134,12 @@ const ErgebnissePage = () => {
     try {
       setLoading(true);
       
-      // Fetch all data in parallel for better performance
-      // const [ergebnisseRes, teamsRes, disziplinenRes] = await Promise.all([
-      //   fetch('http://localhost:3001/api/ergebnisse'),
-      //   fetch('http://localhost:3001/api/teams'),
-      //   fetch('http://localhost:3001/api/disziplins')
-      // ]);
-
-
-
-
-        const { ergebnisse, teams, disziplins, loading, error } = useDataContext();
-
-        const ergebnisseRes = ergebnisse;
-        const teamsRes = teams;
-        const disziplinenRes = disziplins;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+      // Example direct API fetch - replace with your actual API endpoints
+      const [ergebnisseRes, teamsRes, disziplinenRes] = await Promise.all([
+        fetch(`${import.meta.env.VITE_API_URL || ''}/ergebnisse`),
+        fetch(`${import.meta.env.VITE_API_URL || ''}/teams`),
+        fetch(`${import.meta.env.VITE_API_URL || ''}/disziplins`)
+      ]);
       
       // Check for errors
       if (!ergebnisseRes.ok || !teamsRes.ok || !disziplinenRes.ok) {
@@ -178,7 +170,7 @@ const ErgebnissePage = () => {
 
   const handleAddErgebnis = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/ergebnisse', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/ergebnisse`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -210,7 +202,7 @@ const ErgebnissePage = () => {
 
   const handleEditErgebnis = async () => {
     try {
-      const response = await fetch(`http://localhost:3001/api/ergebnisse/${currentErgebnis.ERGEBNISID}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/ergebnisse/${currentErgebnis.ERGEBNISID}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -241,7 +233,7 @@ const ErgebnissePage = () => {
 
   const handleDeleteErgebnis = async () => {
     try {
-      const response = await fetch(`http://localhost:3001/api/ergebnisse/${currentErgebnis.ERGEBNISID}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/ergebnisse/${currentErgebnis.ERGEBNISID}`, {
         method: 'DELETE',
       });
       
@@ -276,18 +268,17 @@ const ErgebnissePage = () => {
     setShowAddModal(true);
   };
 
-    // Beispielsweise in der openEditModal-Funktion:
-    const openEditModal = (ergebnis) => {
-        setCurrentErgebnis(ergebnis);
-        setFormData({
-        TEAMID: ergebnis.TEAMID,
-        DISZIPLINID: ergebnis.DISZIPLINID,
-        PUNKTE: ergebnis.POINTSID || ergebnis.PUNKTE, // Unterstützt beide Varianten
-        DATUM: ergebnis.DATUM || new Date().toISOString().split('T')[0],
-        KOMMENTAR: ergebnis.KOMMENTAR || ''
-        });
-        setShowEditModal(true);
-    };
+  const openEditModal = (ergebnis) => {
+    setCurrentErgebnis(ergebnis);
+    setFormData({
+      TEAMID: ergebnis.TEAMID,
+      DISZIPLINID: ergebnis.DISZIPLINID,
+      PUNKTE: ergebnis.POINTSID || ergebnis.PUNKTE, // Supports both variants
+      DATUM: ergebnis.DATUM || new Date().toISOString().split('T')[0],
+      KOMMENTAR: ergebnis.KOMMENTAR || ''
+    });
+    setShowEditModal(true);
+  };
 
   const openDeleteModal = (ergebnis) => {
     setCurrentErgebnis(ergebnis);
@@ -304,22 +295,22 @@ const ErgebnissePage = () => {
     });
   };
 
-    // Enhanced ergebnisse data with team and disziplin names
-    const enhancedErgebnisse = useMemo(() => {
-        return ergebnisse.map(ergebnis => {
-        const team = teams.find(t => t.TEAMID === ergebnis.TEAMID);
-        const disziplin = disziplinen.find(d => d.DISZIPLINID === ergebnis.DISZIPLINID);
-        
-        return {
-            ...ergebnis,
-            teamName: team?.NAME || `Team ${ergebnis.TEAMID}`,
-            disziplinName: disziplin?.NAME || `Disziplin ${ergebnis.DISZIPLINID}`,
-            // Verwende POINTSID statt PUNKTE für die Punktzahl
-            PUNKTE: ergebnis.POINTSID, // Auf Frontend-Seite bleibt PUNKTE als Begriff
-            punkteNumber: parseFloat(ergebnis.POINTSID) || 0 // Umwandlung für numerische Operationen
-        };
-        });
-    }, [ergebnisse, teams, disziplinen]);
+  // Enhanced ergebnisse data with team and disziplin names
+  const enhancedErgebnisse = useMemo(() => {
+    return ergebnisse.map(ergebnis => {
+      const team = teams.find(t => t.TEAMID === ergebnis.TEAMID);
+      const disziplin = disziplinen.find(d => d.DISZIPLINID === ergebnis.DISZIPLINID);
+      
+      return {
+        ...ergebnis,
+        teamName: team?.NAME || `Team ${ergebnis.TEAMID}`,
+        disziplinName: disziplin?.NAME || `Disziplin ${ergebnis.DISZIPLINID}`,
+        // Use POINTSID instead of PUNKTE for the score
+        PUNKTE: ergebnis.POINTSID || ergebnis.PUNKTE, // Ensure we handle both formats
+        punkteNumber: parseFloat(ergebnis.POINTSID || ergebnis.PUNKTE) || 0 // Convert for numeric operations
+      };
+    });
+  }, [ergebnisse, teams, disziplinen]);
 
   // Filtered and sorted ergebnisse
   const filteredErgebnisse = useMemo(() => {

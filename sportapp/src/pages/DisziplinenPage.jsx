@@ -93,7 +93,9 @@ const DisziplinenPage = () => {
   const fetchDisziplinen = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3001/api/disziplins');
+      //const response = await fetch('http://localhost:3001/api/disziplins');
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/disziplins/`);
+
       
       if (!response.ok) {
         throw new Error(`HTTP error: ${response.status}`);
@@ -117,7 +119,8 @@ const DisziplinenPage = () => {
 
   const handleAddDisziplin = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/disziplins', {
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/disziplins/${id}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -149,7 +152,8 @@ const DisziplinenPage = () => {
 
   const handleEditDisziplin = async () => {
     try {
-      const response = await fetch(`http://localhost:3001/api/disziplins/${currentDisziplin.DISZIPLINID}`, {
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/disziplins/${currentDisziplin.DISZIPLINID}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -180,7 +184,7 @@ const DisziplinenPage = () => {
 
   const handleDeleteDisziplin = async () => {
     try {
-      const response = await fetch(`http://localhost:3001/api/disziplins/${currentDisziplin.DISZIPLINID}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/disziplins/${currentDisziplin.DISZIPLINID}`, {
         method: 'DELETE',
       });
       
