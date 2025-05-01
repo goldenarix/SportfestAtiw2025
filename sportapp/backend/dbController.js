@@ -817,7 +817,285 @@ const ErgebnisController = {
   }
 };
 
+// STATION table operations
+const StationController = {
+  // Get all stations
+  getAll: async (req, res) => {
+    try {
+      const result = await executeQuery('SELECT * FROM Station ORDER BY STATIONID');
+      
+      if (result.success) {
+        res.json({
+          success: true,
+          data: result.data
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          error: result.error || 'Fehler beim Abrufen der Stationen'
+        });
+      }
+    } catch (err) {
+      console.error('Error getting stations:', err);
+      res.status(500).json({
+        success: false,
+        error: 'Serverfehler beim Abrufen der Stationen'
+      });
+    }
+  },
 
+  // Get station by ID
+  getById: async (req, res) => {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Stations-ID ist erforderlich'
+      });
+    }
+    
+    try {
+      const result = await executeQuery(
+        'SELECT * FROM Station WHERE STATIONID = :id',
+        [id]
+      );
+      
+      if (result.success) {
+        if (result.data.length === 0) {
+          return res.status(404).json({
+            success: false,
+            error: 'Station nicht gefunden'
+          });
+        }
+        
+        res.json({
+          success: true,
+          data: result.data
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          error: result.error || 'Fehler beim Abrufen der Station'
+        });
+      }
+    } catch (err) {
+      console.error('Error getting station by ID:', err);
+      res.status(500).json({
+        success: false,
+        error: 'Serverfehler beim Abrufen der Station'
+      });
+    }
+  },
+
+  // Create a new station with debugging and manual ID
+  create: async (req, res) => {
+    const { NAME, BESCHREIBUNG, ORT, AKTIV } = req.body;
+    
+    if (!NAME) {
+      return res.status(400).json({
+        success: false,
+        error: 'Name ist erforderlich'
+      });
+    }
+    
+    let connection;
+    
+    try {
+      console.log('Creating new Station with data:', req.body);
+      
+      // Get connection directly for better control
+      connection = await oracledb.getConnection('appPool');
+      
+      // 1. Get next ID from max ID in table
+      const getMaxIdResult = await connection.execute(
+        'SELECT NVL(MAX(STATIONID), 0) + 1 as NEXT_ID FROM Station',
+        [],
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      
+      const nextId = getMaxIdResult.rows[0].NEXT_ID;
+      console.log('Next Station ID:', nextId);
+      
+      // 2. Insert with explicit ID
+      const insertQuery = `
+        INSERT INTO Station (STATIONID, NAME, BESCHREIBUNG, ORT, AKTIV) 
+        VALUES (:id, :name, :beschreibung, :ort, :aktiv)
+      `;
+      
+      console.log('Insert query:', insertQuery);
+      
+      const binds = {
+        id: nextId,
+        name: NAME,
+        beschreibung: BESCHREIBUNG || null,
+        ort: ORT || null,
+        aktiv: AKTIV || 'Y'
+      };
+      
+      console.log('Binds:', binds);
+      
+      const insertResult = await connection.execute(
+        insertQuery,
+        binds,
+        { autoCommit: true }
+      );
+      
+      console.log('Insert result:', insertResult);
+      
+      res.status(201).json({
+        success: true,
+        message: 'Station erfolgreich erstellt',
+        id: nextId
+      });
+    } catch (err) {
+      console.error('Error creating Station:', err);
+      res.status(500).json({
+        success: false,
+        error: 'Fehler beim Erstellen der Station: ' + err.message
+      });
+    } finally {
+      if (connection) {
+        try {
+          await connection.close();
+        } catch (err) {
+          console.error('Error closing connection:', err);
+        }
+      }
+    }
+  },
+
+  // Update a station with debugging
+  update: async (req, res) => {
+    const { id } = req.params;
+    const { NAME, BESCHREIBUNG, ORT, AKTIV } = req.body;
+    
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Stations-ID ist erforderlich'
+      });
+    }
+    
+    console.log('Updating Station:', id, req.body);
+    
+    // Build SET clause and parameters dynamically based on provided data
+    const updates = [];
+    const params = { id };
+    
+    if (NAME !== undefined) {
+      updates.push('NAME = :name');
+      params.name = NAME;
+    }
+    
+    if (BESCHREIBUNG !== undefined) {
+      updates.push('BESCHREIBUNG = :beschreibung');
+      params.beschreibung = BESCHREIBUNG;
+    }
+    
+    if (ORT !== undefined) {
+      updates.push('ORT = :ort');
+      params.ort = ORT;
+    }
+    
+    if (AKTIV !== undefined) {
+      updates.push('AKTIV = :aktiv');
+      params.aktiv = AKTIV;
+    }
+    
+    if (updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Keine Änderungen angegeben'
+      });
+    }
+    
+    const updateQuery = `
+      UPDATE Station 
+      SET ${updates.join(', ')} 
+      WHERE STATIONID = :id
+    `;
+    
+    console.log('Update query:', updateQuery);
+    console.log('Params:', params);
+    
+    try {
+      const result = await executeQuery(updateQuery, params, { autoCommit: true });
+      
+      if (result.success) {
+        res.json({
+          success: true,
+          message: 'Station erfolgreich aktualisiert'
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          error: result.error || 'Fehler beim Aktualisieren der Station'
+        });
+      }
+    } catch (err) {
+      console.error('Error updating Station:', err);
+      res.status(500).json({
+        success: false,
+        error: 'Serverfehler beim Aktualisieren der Station'
+      });
+    }
+  },
+
+  // Delete a station with debugging
+  delete: async (req, res) => {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Stations-ID ist erforderlich'
+      });
+    }
+    
+    console.log('Deleting Station with ID:', id);
+    
+    try {
+      // First check if station exists
+      const checkResult = await executeQuery(
+        'SELECT STATIONID FROM Station WHERE STATIONID = :id',
+        [id]
+      );
+      
+      if (checkResult.success && checkResult.data.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Station nicht gefunden'
+        });
+      }
+      
+      // Delete the station
+      const result = await executeQuery(
+        'DELETE FROM Station WHERE STATIONID = :id',
+        [id],
+        { autoCommit: true }
+      );
+      
+      if (result.success) {
+        res.json({
+          success: true,
+          message: 'Station erfolgreich gelöscht'
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          error: result.error || 'Fehler beim Löschen der Station'
+        });
+      }
+    } catch (err) {
+      console.error('Error deleting Station:', err);
+      res.status(500).json({
+        success: false,
+        error: 'Serverfehler beim Löschen der Station'
+      });
+    }
+  }
+};
 
 
 
@@ -845,5 +1123,6 @@ module.exports = {
   TeamController,
   DisziplinController,
   ErgebnisController,
-  getTableSchema
+  getTableSchema,
+  StationController
 };

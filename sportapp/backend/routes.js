@@ -6,12 +6,73 @@ const {
   TeamController,
   DisziplinController,
   ErgebnisController,
+  StationController,
   getTableSchema
 } = require('./dbController');
+const authController = require('./authController');
 
 // Middleware to handle errors
 const asyncHandler = fn => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
+
+// ===== AUTHENTICATION ROUTES =====
+// Login routes
+router.post('/auth/login/betreuer', asyncHandler(authController.loginBetreuer));
+router.post('/auth/login/admin', asyncHandler(authController.loginAdmin));
+
+// Registration routes (admin only can create other users)
+router.post('/auth/register/betreuer', 
+  authController.authenticateToken, 
+  authController.requireAdmin, 
+  asyncHandler(authController.registerBetreuer)
+);
+router.post('/auth/register/admin', 
+  authController.authenticateToken, 
+  authController.requireAdmin, 
+  asyncHandler(authController.registerAdmin)
+);
+
+// User management routes
+router.get('/auth/me', 
+  authController.authenticateToken, 
+  authController.getCurrentUser
+);
+
+router.get('/auth/betreuer', 
+  authController.authenticateToken, 
+  authController.requireAdmin,
+  asyncHandler(authController.getAllBetreuer)
+);
+
+router.get('/auth/admins', 
+  authController.authenticateToken, 
+  authController.requireAdmin,
+  asyncHandler(authController.getAllAdmins)
+);
+
+// Password management
+router.put('/auth/betreuer/password', 
+  authController.authenticateToken, 
+  asyncHandler(authController.changeBetreuerPassword)
+);
+
+router.put('/auth/admin/password', 
+  authController.authenticateToken, 
+  asyncHandler(authController.changeAdminPassword)
+);
+
+// Delete accounts (admin only)
+router.delete('/auth/betreuer/:id', 
+  authController.authenticateToken, 
+  authController.requireAdmin,
+  asyncHandler(authController.deleteBetreuer)
+);
+
+router.delete('/auth/admin/:id', 
+  authController.authenticateToken, 
+  authController.requireAdmin,
+  asyncHandler(authController.deleteAdmin)
+);
 
 // Get table schema information
 router.get('/schema/:tableName', asyncHandler(async (req, res) => {
@@ -264,6 +325,21 @@ router.delete('/ergebnisse/:id', asyncHandler(async (req, res) => {
 }));
 
 
+
+
+
+
+
+
+
+
+
+// Stations routes
+router.get('/stations', StationController.getAll);
+router.get('/stations/:id', StationController.getById);
+router.post('/stations', authController.authenticateToken, StationController.create);
+router.put('/stations/:id', authController.authenticateToken, StationController.update);
+router.delete('/stations/:id', authController.authenticateToken, StationController.delete);
 
 
 // Add this to your routes.js file

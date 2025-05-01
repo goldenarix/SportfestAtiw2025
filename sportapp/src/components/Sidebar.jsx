@@ -571,7 +571,6 @@
 // export default UltraModernSidebar;
 
 
-
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   LayoutDashboard, 
@@ -591,13 +590,18 @@ import {
   Timer,
   HeartPulse,
   Trophy,
-  Target
+  Target,
+  ShieldCheck,
+  UserCog
 } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 import userIMG from '../assets/user.png';
 
 const SportArtisticSidebar = ({ darkMode, toggleDarkMode }) => {
+  const { currentUser, logout, isAdmin } = useAuth();
+  const navigate = useNavigate();
   const location = useLocation();
   const [expanded, setExpanded] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -629,17 +633,30 @@ const SportArtisticSidebar = ({ darkMode, toggleDarkMode }) => {
   const toggleSidebar = () => setExpanded(!expanded);
   const toggleMobile = () => setMobileOpen(!mobileOpen);
 
-  const menuItems = [
+  // Construct menu items based on user role
+  const baseMenuItems = [
     { icon: <LayoutDashboard size={20} />, title: 'Dashboard', link: '/' },
     { icon: <Flag size={20} />, title: 'Stationen', link: '/stations' },
     { icon: <Users size={20} />, title: 'Teilnehmer', link: '/participants' },
     { icon: <Target size={20} />, title: 'Disziplinen', link: '/disziplinen' },
     { icon: <Trophy size={20} />, title: 'Ergebnisse', link: '/ergebnisse' },
-
-   
-    
     { icon: <Settings size={20} />, title: 'Einstellungen', link: '/settings' },
   ];
+  
+  // Add admin-only menu items if the user is an admin
+  const adminMenuItems = isAdmin() ? [
+    { icon: <UserCog size={20} />, title: 'Benutzerverwaltung', link: '/users' },
+  ] : [];
+  
+  // Combine the menu items
+  const menuItems = [...baseMenuItems, ...adminMenuItems];
+  
+  // Handle logout
+  const handleLogout = () => {
+    logout();
+    setMobileOpen(false);
+    navigate('/login');
+  };
 
   // Matching artistic dashboard color palette
   const colors = {
@@ -715,6 +732,14 @@ const SportArtisticSidebar = ({ darkMode, toggleDarkMode }) => {
       transform: `perspective(2000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(${floatOffset}px)`,
       transition: 'transform 0.3s ease-out',
     };
+  };
+
+  // Custom scrollbar colors based on current theme
+  const scrollbarColors = {
+    track: darkMode ? 'rgba(59, 66, 82, 0.2)' : 'rgba(238, 238, 238, 0.6)',
+    thumb: darkMode ? 'rgba(236, 239, 244, 0.1)' : 'rgba(46, 52, 64, 0.1)',
+    thumbHover: darkMode ? 'rgba(236, 239, 244, 0.2)' : 'rgba(46, 52, 64, 0.2)',
+    thumbActive: darkMode ? `${colors.primary}60` : `${colors.primary}40`,
   };
 
   return (
@@ -844,7 +869,7 @@ const SportArtisticSidebar = ({ darkMode, toggleDarkMode }) => {
         
         {/* Content Container */}
         <div 
-          className="flex flex-col h-full pt-8 px-6 pb-5 relative z-10"
+          className="flex flex-col h-full pt-8 px-6 pb-5 relative z-10 custom-scrollbar-container"
           style={getArtisticTransform(0.1, 0)}
         >
           {/* Logo Section - Sport Themed Artistic */}
@@ -954,8 +979,8 @@ const SportArtisticSidebar = ({ darkMode, toggleDarkMode }) => {
             ></div>
           </button>
 
-          {/* Nav Items - Sport Themed Design */}
-          <nav className="flex-1 pr-2 overflow-y-auto overflow-x-hidden">
+          {/* Nav Items - Sport Themed Design with Custom Scrollbar */}
+          <nav className="flex-1 pr-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
             <ul className="space-y-2">
               {menuItems.map((item, index) => {
                 const isActive = activePath === item.link;
@@ -1073,28 +1098,6 @@ const SportArtisticSidebar = ({ darkMode, toggleDarkMode }) => {
                         </span>
                       )}
                     </Link>
-
-
-                                        
-                    {/* <Link 
-                      to="/test-db"
-                      className="flex items-center p-3 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
-                    >
-                      <div className="mr-3 p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-500" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm2 1h12v1H4V6zm0 3h12v1H4V9zm0 3h12v1H4v-1z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                      <span>Database Test</span>
-                    </Link> */}
-
-
-
-
-
-
-
-
                   </li>
                 );
               })}
@@ -1268,7 +1271,7 @@ const SportArtisticSidebar = ({ darkMode, toggleDarkMode }) => {
                     className="text-sm font-medium tracking-wide"
                     style={{ color: c.text }}
                   >
-                    Admin User
+                    {currentUser?.name || 'User'}
                   </p>
                   <div className="flex items-center mt-0.5">
                     {/* Activity indicator */}
@@ -1280,7 +1283,7 @@ const SportArtisticSidebar = ({ darkMode, toggleDarkMode }) => {
                       className="text-xs"
                       style={{ color: c.textSecondary }}
                     >
-                      Organisator
+                      {currentUser?.role === 'admin' ? 'Organisator' : 'Betreuer'}
                     </span>
                   </div>
                 </div>
@@ -1288,6 +1291,7 @@ const SportArtisticSidebar = ({ darkMode, toggleDarkMode }) => {
               
               {expanded && (
                 <button 
+                  onClick={handleLogout}
                   className="ml-auto p-1.5 rounded-full transition-all duration-200 hover:bg-opacity-10 hover:scale-110"
                   style={{ 
                     color: c.textSecondary,
@@ -1302,7 +1306,7 @@ const SportArtisticSidebar = ({ darkMode, toggleDarkMode }) => {
         </div>
       </aside>
 
-      {/* CSS for sport-themed animations */}
+      {/* CSS for sport-themed animations and custom scrollbar */}
       <style jsx>{`
         /* Pulse animation for heart rate/activity */
         .pulse-animation {
@@ -1348,6 +1352,53 @@ const SportArtisticSidebar = ({ darkMode, toggleDarkMode }) => {
         .pulse-staggered-3 {
           animation: pulse 1.5s ease-in-out infinite;
           animation-delay: 0.6s;
+        }
+        
+        /* Custom Modern Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: ${scrollbarColors.track};
+          border-radius: 10px;
+          margin: 4px 0;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: ${scrollbarColors.thumb};
+          border-radius: 10px;
+          transition: all 0.3s ease;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: ${scrollbarColors.thumbHover};
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:active {
+          background: ${scrollbarColors.thumbActive};
+        }
+        
+        /* Show scrollbar only on hover */
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: transparent transparent;
+          transition: scrollbar-color 0.3s ease;
+        }
+        
+        .custom-scrollbar-container:hover .custom-scrollbar {
+          scrollbar-color: ${scrollbarColors.thumb} ${scrollbarColors.track};
+        }
+        
+        /* Scrollbar animation for interactive effect */
+        @keyframes scrollGlow {
+          0% { background: ${scrollbarColors.thumb}; }
+          50% { background: ${scrollbarColors.thumbActive}; }
+          100% { background: ${scrollbarColors.thumb}; }
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          animation: scrollGlow 2s ease-in-out infinite;
         }
       `}</style>
     </>

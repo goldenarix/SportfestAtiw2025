@@ -4,6 +4,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { AnimatePresence } from 'framer-motion';
 import UltraModernLayout from './components/Layout';
 import TestPage from './pages/TestPage';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Lazy-loaded components for better performance
 const UltraModernDashboard = lazy(() => import('./components/Dashboard'));
@@ -16,7 +18,11 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const ScoreEntryPage = lazy(() => import('./pages/ScoreEntryPage'));
 //const TestPage = lazy(() => import('./pages/TestPage'));
 const DisziplinenPage = lazy(() => import('./pages/DisziplinenPage'));
+const DisziplinEditorPage = lazy(() => import('./pages/DisziplinEditorPage'));
+const DisziplinDetailPage = lazy(() => import('./pages/DisziplinDetailPage'));
 const ErgebnissePage = lazy(() => import('./pages/ErgebnissePage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const UserManagementPage = lazy(() => import('./pages/UserManagementPage'));
 
 // Loading component
 const PageLoader = () => (
@@ -35,7 +41,19 @@ const AnimatedRoutes = () => {
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
-        <Route path="/" element={<UltraModernLayout />}>
+        {/* Login route - Public */}
+        <Route path="/login" element={
+          <Suspense fallback={<PageLoader />}>
+            <LoginPage />
+          </Suspense>
+        } />
+        
+        {/* Protected routes - require authentication */}
+        <Route path="/" element={
+          <ProtectedRoute>
+            <UltraModernLayout />
+          </ProtectedRoute>
+        }>
           <Route index element={
             <Suspense fallback={<PageLoader />}>
               <UltraModernDashboard />
@@ -87,9 +105,33 @@ const AnimatedRoutes = () => {
               <DisziplinenPage />
             </Suspense>
           } />
+          <Route path="disziplinen/new" element={
+            <Suspense fallback={<PageLoader />}>
+              <DisziplinEditorPage />
+            </Suspense>
+          } />
+          <Route path="disziplinen/:id/edit" element={
+            <Suspense fallback={<PageLoader />}>
+              <DisziplinEditorPage />
+            </Suspense>
+          } />
+          <Route path="disziplinen/:id" element={
+            <Suspense fallback={<PageLoader />}>
+              <DisziplinDetailPage />
+            </Suspense>
+          } />
           <Route path="ergebnisse" element={
             <Suspense fallback={<PageLoader />}>
               <ErgebnissePage />
+            </Suspense>
+          } />
+          
+          {/* Admin-only route */}
+          <Route path="users" element={
+            <Suspense fallback={<PageLoader />}>
+              <ProtectedRoute requireAdmin={true}>
+                <UserManagementPage />
+              </ProtectedRoute>
             </Suspense>
           } />
           <Route path="*" element={<Navigate to="/" />} />
@@ -101,9 +143,11 @@ const AnimatedRoutes = () => {
 
 const App = () => {
   return (
-    <Router>
-      <AnimatedRoutes />
-    </Router>
+    <AuthProvider>
+      <Router>
+        <AnimatedRoutes />
+      </Router>
+    </AuthProvider>
   );
 };
 

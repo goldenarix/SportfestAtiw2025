@@ -234,7 +234,8 @@
 
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   Bell, 
   Search, 
@@ -265,6 +266,8 @@ import UltraModernSidebar from './Sidebar';
 import userIMG from '../assets/user.png';
 
 const ArtisticLayout = () => {
+  const { currentUser, logout } = useAuth();
+  const navigate = useNavigate();
   const [isDarkMode, setIsDarkMode] = useState(
     localStorage.getItem('sportapp-theme') === 'dark' || 
     (!localStorage.getItem('sportapp-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -844,6 +847,8 @@ const ArtisticLayout = () => {
                   border: `1px solid ${t.border}`,
                   boxShadow: t.shadow
                 }}
+                onClick={() => logout() && navigate('/login')}
+                title="Abmelden"
               >
                 <img 
                   src={userIMG} 
