@@ -1,48 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Save, X, CheckCircle, Users } from 'lucide-react';
+import { useDataContext } from '../..backend/DataContext';
+
+
 
 const TeamScoreEntry = ({ disziplinId, disziplinName = "Unbekannte Disziplin" }) => {
+  const { teams, loading, error } = useDataContext(); // Teams aus dem Context 🔥
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTeam, setSelectedTeam] = useState(null);
-  const [teams, setTeams] = useState([]);
   const [score, setScore] = useState('');
   const [notes, setNotes] = useState('');
   const [notification, setNotification] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
-  // Fetch teams from API
-  useEffect(() => {
-    const fetchTeams = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('http://localhost:3001/api/teams');
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        
-        if (result.success) {
-          setTeams(result.data || []);
-          setError(null);
-        } else {
-          throw new Error(result.error || 'Failed to fetch teams');
-        }
-      } catch (err) {
-        console.error('Error fetching teams:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTeams();
-  }, []);
-
-  // Filter teams based on search term
-  const filteredTeams = teams.filter(team => 
+  const filteredTeams = teams.filter(team =>
     team.NAME?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     team.TEAMID.toString().includes(searchTerm)
   );
@@ -54,9 +24,8 @@ const TeamScoreEntry = ({ disziplinId, disziplinName = "Unbekannte Disziplin" })
 
   const handleScoreSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
-      // Prepare data for submission
       const ergebnisData = {
         TEAMID: selectedTeam.TEAMID,
         DISZIPLINID: disziplinId,
@@ -64,28 +33,23 @@ const TeamScoreEntry = ({ disziplinId, disziplinName = "Unbekannte Disziplin" })
         DATUM: new Date().toISOString().split('T')[0],
         KOMMENTAR: notes
       };
-      
-      console.log('Submitting team score:', ergebnisData);
-      
-      // Send to API
-      const response = await fetch('http://localhost:3001/api/ergebnisse', {
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/ergebnisse`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(ergebnisData),
       });
-      
+
       const result = await response.json();
-      
+
       if (result.success) {
-        // Show success notification
         setNotification({
           type: 'success',
           message: `Punkte für Team ${selectedTeam.NAME} erfolgreich gespeichert.`
         });
-        
-        // Reset form after submission
+
         setTimeout(() => {
           setSelectedTeam(null);
           setScore('');
@@ -93,10 +57,10 @@ const TeamScoreEntry = ({ disziplinId, disziplinName = "Unbekannte Disziplin" })
           setNotification(null);
         }, 3000);
       } else {
-        throw new Error(result.error || 'Failed to save score');
+        throw new Error(result.error || 'Fehler beim Speichern');
       }
     } catch (err) {
-      console.error('Error saving score:', err);
+      console.error('Fehler beim Speichern:', err);
       setNotification({
         type: 'error',
         message: `Fehler: ${err.message}`
@@ -109,6 +73,7 @@ const TeamScoreEntry = ({ disziplinId, disziplinName = "Unbekannte Disziplin" })
     setScore('');
     setNotes('');
   };
+
 
   if (loading) {
     return (

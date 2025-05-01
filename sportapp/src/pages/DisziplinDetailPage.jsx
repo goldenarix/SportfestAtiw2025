@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useDataContext } from '../../backend/DataContext';
 
 import { useParams, Link } from 'react-router-dom';
 import { 
@@ -44,70 +45,35 @@ const DisziplinDetailPage = () => {
   const [sortBy, setSortBy] = useState('points'); // 'points', 'name'
   const [sortOrder, setSortOrder] = useState('desc'); // 'asc', 'desc'
 
+  const { disziplins, ergebnisse, teams } = useDataContext();
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        
-        // Fetch discipline details and results in parallel
-        const [disziplinResponse, ergebnisseResponse, teamsResponse] = await Promise.all([
-          fetch(`http://localhost:3001/api/disziplins/${id}`),
-          fetch(`http://localhost:3001/api/ergebnisse/disziplin/${id}`),
-          fetch('http://localhost:3001/api/teams')
-        ]);
-        
-        // Check for errors
-        if (!disziplinResponse.ok || !ergebnisseResponse.ok || !teamsResponse.ok) {
-          throw new Error('Ein oder mehrere API-Anfragen fehlgeschlagen');
-        }
-        
-        // Parse the responses
-        const disziplinResult = await disziplinResponse.json();
-        const ergebnisseResult = await ergebnisseResponse.json();
-        const teamsResult = await teamsResponse.json();
-        
-        if (disziplinResult.success && ergebnisseResult.success && teamsResult.success) {
-          // Set discipline data
-          if (disziplinResult.data && disziplinResult.data.length > 0) {
-            setDisziplin(disziplinResult.data[0]);
-          } else {
-            throw new Error('Disziplin nicht gefunden');
-          }
-          
-          // Process results with team data
-          if (ergebnisseResult.data && teamsResult.data) {
-            const teamMap = {};
-            teamsResult.data.forEach(team => {
-              teamMap[team.TEAMID] = team;
-            });
-            
-            // Combine ergebnisse with team data
-            const enhancedErgebnisse = ergebnisseResult.data.map(ergebnis => {
-              const team = teamMap[ergebnis.TEAMID] || { NAME: `Team ${ergebnis.TEAMID}` };
-              return {
-                ...ergebnis,
-                teamName: team.NAME,
-                team: team
-              };
-            });
-            
-            setTeamErgebnisse(enhancedErgebnisse);
-          }
-          
-          setError(null);
-        } else {
-          throw new Error('Fehler beim Laden der Daten');
-        }
-      } catch (err) {
-        console.error('Error fetching data:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchData();
-  }, [id]);
+    setLoading(true);
+  
+    try {
+      const disziplin = disziplins.find(d => d.DISZIPLINID.toString() === id);
+      if (!disziplin) throw new Error('Disziplin nicht gefunden');
+      setDisziplin(disziplin);
+  
+      const relevantErgebnisse = ergebnisse.filter(e => e.DISZIPLINID.toString() === id);
+  
+      const teamMap = Object.fromEntries(teams.map(t => [t.TEAMID, t]));
+      const enhancedErgebnisse = relevantErgebnisse.map(ergebnis => ({
+        ...ergebnis,
+        teamName: teamMap[ergebnis.TEAMID]?.NAME || `Team ${ergebnis.TEAMID}`,
+        team: teamMap[ergebnis.TEAMID]
+      }));
+  
+      setTeamErgebnisse(enhancedErgebnisse);
+      setError(null);
+    } catch (err) {
+      console.error('Error loading disziplin data:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [id, disziplins, ergebnisse, teams]);
+  
 
   // Sort and filter the results
   const sortedResults = [...teamErgebnisse].sort((a, b) => {

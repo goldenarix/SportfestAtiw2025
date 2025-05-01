@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useDataContext } from '../..backend/DataLoader';
 import { 
   Trophy, 
   AlertTriangle, 
@@ -115,11 +116,38 @@ const ErgebnissePage = () => {
       setLoading(true);
       
       // Fetch all data in parallel for better performance
-      const [ergebnisseRes, teamsRes, disziplinenRes] = await Promise.all([
-        fetch('http://localhost:3001/api/ergebnisse'),
-        fetch('http://localhost:3001/api/teams'),
-        fetch('http://localhost:3001/api/disziplins')
-      ]);
+      // const [ergebnisseRes, teamsRes, disziplinenRes] = await Promise.all([
+      //   fetch('http://localhost:3001/api/ergebnisse'),
+      //   fetch('http://localhost:3001/api/teams'),
+      //   fetch('http://localhost:3001/api/disziplins')
+      // ]);
+
+
+
+
+        const { ergebnisse, teams, disziplins, loading, error } = useDataContext();
+
+        const ergebnisseRes = ergebnisse;
+        const teamsRes = teams;
+        const disziplinenRes = disziplins;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       
       // Check for errors
       if (!ergebnisseRes.ok || !teamsRes.ok || !disziplinenRes.ok) {

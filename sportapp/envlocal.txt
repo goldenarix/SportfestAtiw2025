@@ -1,0 +1,3 @@
+VITE_API_URL=https://padersport-api.onrender.com - hostet auf render
+
+VITE_API_URL=http://localhost:3001/api - locale api

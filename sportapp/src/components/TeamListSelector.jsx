@@ -1,75 +1,51 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Search, X, CheckCircle, Filter, ChevronDown } from 'lucide-react';
+import { useDataContext } from '../..backend/DataContext';
+
+import React, { useState, useEffect } from 'react';
+import { Users, Search, X, CheckCircle, Filter, ChevronDown } from 'lucide-react';
+import { useDataContext } from '../../backend/DataContext'; // Pfad ggf. anpassen!
 
 const TeamListSelector = ({ onTeamSelect, selectedTeamId = null, placeholder = "Team auswählen" }) => {
-  const [teams, setTeams] = useState([]);
+  const { teams, loading, error } = useDataContext(); // 🔥 Kontextbasiert
   const [filteredTeams, setFilteredTeams] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState('all');
-  
-  // Fetch teams from API
+
+  // Filter bei Änderungen
   useEffect(() => {
-    const fetchTeams = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('http://localhost:3001/api/teams');
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        
-        if (result.success) {
-          const teamData = result.data || [];
-          setTeams(teamData);
-          setFilteredTeams(teamData);
-          setError(null);
-          
-          // If a selectedTeamId is provided, find and set that team
-          if (selectedTeamId) {
-            const team = teamData.find(t => t.TEAMID === selectedTeamId);
-            if (team) {
-              setSelectedTeam(team);
-            }
-          }
-        } else {
-          throw new Error(result.error || 'Failed to fetch teams');
-        }
-      } catch (err) {
-        console.error('Error fetching teams:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
+    if (!loading && teams.length > 0) {
+      const teamList = [...teams]; // Deep copy for safety
+
+      // Setzt Default-Auswahl falls vorhanden
+      if (selectedTeamId && !selectedTeam) {
+        const found = teamList.find(t => t.TEAMID === selectedTeamId);
+        if (found) setSelectedTeam(found);
       }
-    };
 
-    fetchTeams();
-  }, [selectedTeamId]);
+      // Initiales Filterset
+      setFilteredTeams(teamList);
+    }
+  }, [teams, selectedTeamId, loading]);
 
-  // Filter teams based on search term and filter
+  // Dynamisches Filtern (Search + Kategorie)
   useEffect(() => {
-    let result = teams;
-    
-    // Apply search filter
+    let result = [...teams];
+
     if (searchTerm) {
-      result = result.filter(team => 
+      result = result.filter(team =>
         team.NAME?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         team.TEAMID.toString().includes(searchTerm)
       );
     }
-    
-    // Apply category filter (if implemented)
+
     if (filter !== 'all') {
-      // This would filter by a team property like class or category
-      // For example:
-      // result = result.filter(team => team.CATEGORY === filter);
+      // Beispiel (du kannst hier echte Kategorien verwenden!)
+      result = result.filter(team => team.KLASSE === filter); // Optional
     }
-    
+
     setFilteredTeams(result);
   }, [searchTerm, filter, teams]);
 
@@ -77,35 +53,26 @@ const TeamListSelector = ({ onTeamSelect, selectedTeamId = null, placeholder = "
     setSelectedTeam(team);
     setIsOpen(false);
     setSearchTerm('');
-    
-    // Call the callback with the selected team
-    if (onTeamSelect) {
-      onTeamSelect(team);
-    }
+    onTeamSelect?.(team);
   };
 
   const handleClearSelection = () => {
     setSelectedTeam(null);
-    
-    // Call the callback with null to indicate cleared selection
-    if (onTeamSelect) {
-      onTeamSelect(null);
-    }
+    onTeamSelect?.(null);
   };
 
-  // Extract unique team categories for filtering (could be classes or other groupings)
   const getUniqueCategories = () => {
-    if (!teams.length) return [];
-    
-    // This is a placeholder. In a real app, you would extract actual categories
-    // For example: const categories = [...new Set(teams.map(team => team.CATEGORY))];
-    return ['Klasse 10', 'Klasse 11', 'Klasse 12'];
+    const unique = new Set();
+    teams.forEach(t => {
+      if (t.KLASSE) unique.add(t.KLASSE);
+    });
+    return Array.from(unique);
   };
 
   return (
     <div className="relative">
-      {/* Selected team display or search input */}
-      <div 
+      {/* Trigger Button */}
+      <div
         className="relative flex items-center w-full p-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 cursor-pointer"
         onClick={() => setIsOpen(!isOpen)}
       >
@@ -120,7 +87,7 @@ const TeamListSelector = ({ onTeamSelect, selectedTeamId = null, placeholder = "
                 <p className="text-xs text-slate-500 dark:text-slate-400">ID: {selectedTeam.TEAMID}</p>
               </div>
             </div>
-            <button 
+            <button
               className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-full hover:bg-slate-100 dark:hover:bg-slate-600"
               onClick={(e) => {
                 e.stopPropagation();
@@ -140,17 +107,17 @@ const TeamListSelector = ({ onTeamSelect, selectedTeamId = null, placeholder = "
           </div>
         )}
       </div>
-      
+
       {/* Dropdown */}
       {isOpen && (
         <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg overflow-hidden">
-          {/* Search and filter bar */}
+          {/* Suchleiste und Filter */}
           <div className="p-2 border-b border-slate-100 dark:border-slate-700">
             <div className="flex items-center space-x-2">
               <div className="relative flex-1">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="h-8 w-full rounded pl-8 pr-3 text-sm border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -158,7 +125,7 @@ const TeamListSelector = ({ onTeamSelect, selectedTeamId = null, placeholder = "
                   onClick={(e) => e.stopPropagation()}
                 />
               </div>
-              
+
               <div className="relative">
                 <select
                   value={filter}
@@ -167,16 +134,16 @@ const TeamListSelector = ({ onTeamSelect, selectedTeamId = null, placeholder = "
                   onClick={(e) => e.stopPropagation()}
                 >
                   <option value="all">Alle Teams</option>
-                  {getUniqueCategories().map((category, index) => (
-                    <option key={index} value={category}>{category}</option>
+                  {getUniqueCategories().map((cat, i) => (
+                    <option key={i} value={cat}>{cat}</option>
                   ))}
                 </select>
                 <Filter className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" size={12} />
               </div>
             </div>
           </div>
-          
-          {/* Team list */}
+
+          {/* Teamliste */}
           <div className="max-h-60 overflow-y-auto">
             {loading ? (
               <div className="p-4 text-center">
@@ -194,7 +161,7 @@ const TeamListSelector = ({ onTeamSelect, selectedTeamId = null, placeholder = "
             ) : (
               <ul className="divide-y divide-slate-100 dark:divide-slate-700">
                 {filteredTeams.map(team => (
-                  <li 
+                  <li
                     key={team.TEAMID}
                     className={`p-2 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer ${
                       selectedTeam?.TEAMID === team.TEAMID ? 'bg-indigo-50 dark:bg-indigo-900/20' : ''
@@ -209,7 +176,6 @@ const TeamListSelector = ({ onTeamSelect, selectedTeamId = null, placeholder = "
                         <p className="font-medium text-slate-800 dark:text-white text-sm">{team.NAME || `Team ${team.TEAMID}`}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">ID: {team.TEAMID}</p>
                       </div>
-                      
                       {selectedTeam?.TEAMID === team.TEAMID && (
                         <CheckCircle className="h-4 w-4 text-indigo-500 ml-auto" />
                       )}

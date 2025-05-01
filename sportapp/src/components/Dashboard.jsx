@@ -36,13 +36,15 @@ const Dashboard = () => {
       try {
         setLoading(true);
         
-        // Fetch all necessary data in parallel
+        const API = import.meta.env.VITE_API_URL;
+
         const [disziplinenResponse, teamsResponse, stationenResponse, ergebnisseResponse] = await Promise.all([
-          fetch('http://localhost:3001/api/disziplins'),
-          fetch('http://localhost:3001/api/teams'),
-          fetch('http://localhost:3001/api/stations'),
-          fetch('http://localhost:3001/api/ergebnisse')
+          fetch(`${API}/disziplins`),
+          fetch(`${API}/teams`),
+          fetch(`${API}/stations`),
+          fetch(`${API}/ergebnisse`)
         ]);
+        
         
         // Process responses
         const disziplinenData = await disziplinenResponse.json();

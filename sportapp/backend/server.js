@@ -53,7 +53,8 @@ async function startServer() {
     // Start listening for requests
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
-      console.log(`API available at: http://localhost:${PORT}/api`);
+      console.log(`Lokale API available at: http://localhost:${PORT}/api`);
+      console.log(`Web Service API available at: https://padersport-api.onrender.com/api`);
       console.log(`Available endpoints:`);
       console.log(`  GET    /api/betreuer           - Get all betreuer`);
       console.log(`  GET    /api/betreuer/:id       - Get betreuer by ID`);
