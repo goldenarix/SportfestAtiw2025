@@ -2,7 +2,7 @@
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
-import UltraModernLayout from './components/Layout';
+import ResponsiveLayout from './components/ResponsiveLayout';
 import TestPage from './pages/TestPage';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -51,7 +51,7 @@ const AnimatedRoutes = () => {
         {/* Protected routes - require authentication */}
         <Route path="/" element={
           <ProtectedRoute>
-            <UltraModernLayout />
+            <ResponsiveLayout />
           </ProtectedRoute>
         }>
           <Route index element={

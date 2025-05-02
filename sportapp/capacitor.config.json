@@ -1,0 +1,41 @@
+{
+  "appId": "com.kaesebrot.mitsenf",
+  "appName": "SportFestApp",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "backgroundColor": "#222831",
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "launchAutoHide": true,
+      "androidScaleType": "CENTER_CROP",
+      "splashImmersive": true,
+      "backgroundColor": "#3f51b5"
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#3f51b5",
+      "overlaysWebView": true,
+      "androidOverlaysWebView": true
+    },
+    "Keyboard": {
+      "resize": "body",
+      "style": "DARK",
+      "resizeOnFullScreen": true
+    },
+    "Haptics": {
+      "enableVibration": true
+    }
+  },
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true,
+    "hideLogs": false,
+    "backgroundColor": "#222831"
+  },
+  "server": {
+    "cleartext": true
+  },
+  "cordova": {}
+}

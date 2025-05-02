@@ -1,266 +1,12 @@
-
-
-
-
-
-// import React, { useState, useEffect } from 'react';
-// import { Outlet } from 'react-router-dom';
-// import { Bell, Search, User, MoonStar, X, Plus, Zap } from 'lucide-react';
-// import FuturisticSidebar from './Sidebar';
-
-// const FuturisticLayout = () => {
-//   const [isDarkMode, setIsDarkMode] = useState(
-//     localStorage.getItem('sportapp-theme') === 'dark' || 
-//     (!localStorage.getItem('sportapp-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)
-//   );
-//   const [searchActive, setSearchActive] = useState(false);
-//   const [notificationsOpen, setNotificationsOpen] = useState(false);
-//   const [mounted, setMounted] = useState(false);
-
-//   // Toggle dark mode
-//   const toggleDarkMode = () => {
-//     setIsDarkMode(!isDarkMode);
-//   };
-
-//   // Apply dark mode class to HTML element
-//   useEffect(() => {
-//     if (isDarkMode) {
-//       document.documentElement.classList.add('dark');
-//     } else {
-//       document.documentElement.classList.remove('dark');
-//     }
-    
-//     // Save preference to localStorage
-//     localStorage.setItem('sportapp-theme', isDarkMode ? 'dark' : 'light');
-//   }, [isDarkMode]);
-
-//   useEffect(() => {
-//     setMounted(true);
-//   }, []);
-
-//   const notifications = [
-//     {
-//       id: 1,
-//       title: 'Neue Teilnehmer',
-//       description: '12 neue Teilnehmer haben sich angemeldet',
-//       time: 'Vor 5 Minuten',
-//       unread: true
-//     },
-//     {
-//       id: 2,
-//       title: 'Station 3 inaktiv',
-//       description: 'Staffellauf Station benötigt Aufmerksamkeit',
-//       time: 'Vor 27 Minuten',
-//       unread: true
-//     },
-//     {
-//       id: 3,
-//       title: 'Ergebnisse aktualisiert',
-//       description: 'Die Rangliste wurde mit neuen Punkten aktualisiert',
-//       time: 'Vor 2 Stunden',
-//       unread: false
-//     },
-//   ];
-
-//   const transitionClasses = "transition-all duration-300 ease-in-out";
-
-//   return (
-//     <div className={`min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300 ${mounted ? 'opacity-100' : 'opacity-0'}`}>
-//       <FuturisticSidebar darkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
-      
-//       <div className="sm:ml-20 md:ml-[84px] lg:ml-[280px] min-h-screen transition-all duration-300">
-//         {/* Header - Futuristic Style */}
-//         <header className="sticky top-0 z-30 h-16 backdrop-blur-md bg-white/70 dark:bg-slate-900/70 border-b border-slate-200/50 dark:border-slate-700/50">
-//           {/* Futuristic Scanner Line Animation */}
-//           <div className="absolute inset-0 overflow-hidden opacity-30 pointer-events-none">
-//             <div className="h-1 w-full bg-gradient-to-r from-transparent via-indigo-500 to-transparent scanner-line"></div>
-//           </div>
-          
-//           <div className="h-full px-4 md:px-6 flex items-center justify-between">
-//             {/* Search Bar with Cyberpunk Style */}
-//             {searchActive ? (
-//               <div 
-//                 className="relative w-full max-w-xl animate-fade-in"
-//               >
-//                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-//                 <input 
-//                   type="text" 
-//                   placeholder="Suchen..." 
-//                   autoFocus
-//                   className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-10 text-sm focus:border-indigo-500 dark:focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-400"
-//                 />
-//                 <button 
-//                   onClick={() => setSearchActive(false)}
-//                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-//                 >
-//                   <X size={16} />
-//                 </button>
-//               </div>
-//             ) : (
-//               <button 
-//                 onClick={() => setSearchActive(true)}
-//                 className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-all duration-200 hover:bg-slate-200 dark:hover:bg-slate-700 hover:scale-105"
-//               >
-//                 <Search size={18} />
-//               </button>
-//             )}
-            
-//             {/* Actions - Cyberpunk Style */}
-//             <div className="flex items-center space-x-3">
-//               {/* Quick Add Button */}
-//               <button 
-//                 className="hidden md:flex items-center px-3 h-10 rounded-xl bg-indigo-600 text-white text-sm font-medium shadow-md shadow-indigo-500/20 transition-all duration-200 hover:bg-indigo-700 hover:scale-105 glow-sm"
-//               >
-//                 <Plus size={16} className="mr-1" /> Neu
-//               </button>
-              
-//               {/* Notifications - Cyberpunk Style */}
-//               <div className="relative">
-//                 <button 
-//                   onClick={() => setNotificationsOpen(!notificationsOpen)}
-//                   className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-all duration-200 hover:bg-slate-200 dark:hover:bg-slate-700 hover:scale-105"
-//                 >
-//                   <Bell size={18} />
-//                   {/* Glowing notification indicator */}
-//                   <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-800 glow-sm"></span>
-//                 </button>
-                
-//                 {/* Notifications Dropdown - Futuristic Style */}
-//                 {notificationsOpen && (
-//                   <div 
-//                     className="absolute right-0 mt-2 w-80 rounded-2xl bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50 animate-fade-in"
-//                   >
-//                     {/* Futuristic Scanner Line Animation */}
-//                     <div className="absolute inset-0 overflow-hidden opacity-20 pointer-events-none">
-//                       <div className="h-1 w-full bg-gradient-to-r from-transparent via-indigo-500 to-transparent scanner-line"></div>
-//                     </div>
-                    
-//                     {/* Cyberpunk Corner Accents */}
-//                     <div className="absolute top-0 left-0 w-8 h-1 bg-indigo-500"></div>
-//                     <div className="absolute top-0 left-0 w-1 h-8 bg-indigo-500"></div>
-                    
-//                     <div className="p-4 border-b border-slate-100 dark:border-slate-700">
-//                       <div className="flex items-center justify-between">
-//                         <h3 className="font-medium text-slate-900 dark:text-white">Benachrichtigungen</h3>
-//                         <button className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">
-//                           Alle markieren
-//                         </button>
-//                       </div>
-//                     </div>
-//                     <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
-//                       {notifications.map(notification => (
-//                         <div 
-//                           key={notification.id} 
-//                           className={`p-4 border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors duration-200 ${
-//                             notification.unread ? 'bg-indigo-50/50 dark:bg-slate-700/10' : ''
-//                           }`}
-//                         >
-//                           <div className="flex">
-//                             <div className="h-9 w-9 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mr-3 flex-shrink-0">
-//                               <Zap size={16} />
-//                             </div>
-//                             <div>
-//                               <h4 className="font-medium text-slate-900 dark:text-white text-sm flex items-center">
-//                                 {notification.title}
-//                                 {notification.unread && (
-//                                   <span className="ml-2 inline-block h-2 w-2 rounded-full bg-indigo-500 glow-sm"></span>
-//                                 )}
-//                               </h4>
-//                               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-//                                 {notification.description}
-//                               </p>
-//                               <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-//                                 {notification.time}
-//                               </p>
-//                             </div>
-//                           </div>
-//                         </div>
-//                       ))}
-//                     </div>
-//                     <div className="p-3 bg-slate-50 dark:bg-slate-700/30 flex justify-center">
-//                       <button className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
-//                         Alle Benachrichtigungen anzeigen
-//                       </button>
-//                     </div>
-//                   </div>
-//                 )}
-//               </div>
-              
-//               {/* Theme Toggle (on smaller screens) */}
-//               <button 
-//                 onClick={toggleDarkMode}
-//                 className="md:hidden w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-all duration-200 hover:bg-slate-200 dark:hover:bg-slate-700 hover:scale-105"
-//               >
-//                 <MoonStar size={18} />
-//               </button>
-              
-//               {/* User Avatar - Cyberpunk Style */}
-//               <div 
-//                 className="h-10 w-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 flex-shrink-0 overflow-hidden cursor-pointer hover:scale-105 transition-transform duration-200"
-//               >
-//                 <img 
-//                   src="/api/placeholder/40/40" 
-//                   alt="User" 
-//                   className="h-full w-full object-cover"
-//                 />
-//               </div>
-//             </div>
-//           </div>
-//         </header>
-        
-//         {/* Main Content */}
-//         <main className="min-h-[calc(100vh-4rem)]">
-//           <Outlet />
-//         </main>
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default FuturisticLayout;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { 
-  Bell, 
-  Search, 
-  Users, 
-  Sun,
-  Moon, 
-  X, 
-  Plus, 
-  Zap, 
-  Download, 
-  Menu, 
-  ArrowRight, 
-  MessageSquare,
-  Mic,
-  Command,
-  Sparkles,
-  Info,
-  PanelRight,
-  AlertCircle,
-  Database,
-  Clock,
-  Settings,
-  Star,
-  CircleDashed,
-  HeartPulse
+  Bell, Search, Users, Sun, Moon, X, Plus, Zap, 
+  Download, Menu, ArrowRight, MessageSquare,
+  Mic, Command, Sparkles, Info, PanelRight, 
+  AlertCircle, Database, Clock, Settings,
+  Star, CircleDashed, HeartPulse
 } from 'lucide-react';
 import UltraModernSidebar from './Sidebar';
 import userIMG from '../assets/user.png';
@@ -279,7 +25,36 @@ const ArtisticLayout = () => {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [scrolled, setScrolled] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [sidebarExpanded, setSidebarExpanded] = useState(() => {
+    const savedState = sessionStorage.getItem('sidebar-expanded');
+    return savedState === null ? true : savedState === 'true';
+  });
   const headerRef = useRef(null);
+  
+  // Listen for sidebar toggle events
+  useEffect(() => {
+    const handleSidebarToggle = () => {
+      const currentState = sessionStorage.getItem('sidebar-expanded');
+      if (currentState !== null) {
+        setSidebarExpanded(currentState === 'true');
+      }
+    };
+    
+    window.addEventListener('sidebar-toggle', handleSidebarToggle);
+    
+    // Also check periodically
+    const interval = setInterval(() => {
+      const currentState = sessionStorage.getItem('sidebar-expanded');
+      if (currentState !== null && (currentState === 'true') !== sidebarExpanded) {
+        setSidebarExpanded(currentState === 'true');
+      }
+    }, 300);
+    
+    return () => {
+      window.removeEventListener('sidebar-toggle', handleSidebarToggle);
+      clearInterval(interval);
+    };
+  }, [sidebarExpanded]);
   
   // Artistic color palette with harmonious colors
   const colors = {
@@ -422,14 +197,6 @@ const ArtisticLayout = () => {
     },
   ];
 
-  // AI Assistant sample messages
-  const aiMessages = [
-    { id: 1, text: "Hallo! Ich bin dein SportApp-Assistent. Wie kann ich dir helfen?", sender: "ai" },
-    { id: 2, text: "Ich brauche eine Übersicht der aktiven Stationen", sender: "user" },
-    { id: 3, text: "Ich zeige dir die aktuell aktiven Stationen und deren Status:", sender: "ai" },
-    { id: 4, text: "• Station 1: Staffellauf (aktiv, 12 Teilnehmer)\n• Station 2: Weitsprung (aktiv, 8 Teilnehmer)\n• Station 3: Kugelstoßen (inaktiv)\n• Station 4: Sprint (aktiv, 5 Teilnehmer)", sender: "ai" },
-  ];
-
   // Artistic transform effect
   const getArtisticTransform = (factor = 1, elementIndex = 0) => {
     // Calculate rotation based on mouse position
@@ -539,9 +306,20 @@ const ArtisticLayout = () => {
         </svg>
       </div>
       
-      <UltraModernSidebar darkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
+      <UltraModernSidebar 
+        darkMode={isDarkMode} 
+        toggleDarkMode={toggleDarkMode} 
+      />
       
-      <div className="sm:ml-20 md:ml-[84px] lg:ml-[280px] min-h-screen transition-all duration-300 relative z-10">
+      <div 
+        className={`
+          ${sidebarExpanded 
+            ? 'sm:ml-20 md:ml-[280px] lg:ml-[280px]' 
+            : 'sm:ml-20 md:ml-[80px] lg:ml-[80px]'
+          } 
+          min-h-screen transition-all duration-500 relative z-10
+        `}
+      >
         {/* Artistic Header */}
         <header 
           ref={headerRef}
@@ -621,8 +399,7 @@ const ArtisticLayout = () => {
                 <button 
                   className="h-8 w-8 flex items-center justify-center rounded-full mr-1 transition-all duration-200"
                   style={{ 
-                    color: t.textSecondary,
-                    ':hover': { color: colors.primary }
+                    color: t.textSecondary
                   }}
                 >
                   <Mic size={15} />
@@ -869,205 +646,6 @@ const ArtisticLayout = () => {
             </div>
           </div>
         </header>
-        
-        {/* AI Assistant Panel - Artistic Design */}
-        <div 
-          style={{
-            ...getArtisticTransform(0.2, 2),
-            position: 'fixed',
-            bottom: '24px',
-            right: '24px',
-            width: '360px',
-            maxWidth: 'calc(100vw - 48px)',
-            height: '550px',
-            maxHeight: 'calc(100vh - 120px)',
-            background: t.surface,
-            borderRadius: '20px',
-            boxShadow: t.shadowHover,
-            border: `1px solid ${t.border}`,
-            transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-            opacity: aiAssistantOpen ? 1 : 0,
-            transform: aiAssistantOpen ? 
-              getArtisticTransform(0.2, 2).transform : 
-              getArtisticTransform(0.2, 2).transform + 'translateY(40px)',
-            pointerEvents: aiAssistantOpen ? 'all' : 'none',
-            zIndex: 40
-          }}
-        >
-          {/* Artistic Background Elements */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-[20px]">
-            {/* Background accent */}
-            <div 
-              className="absolute -top-10 -right-10 w-40 h-40 rounded-full opacity-[0.03]"
-              style={{ background: colors.soft.purple }}
-            ></div>
-            
-            <div 
-              className="absolute bottom-0 left-0 w-full h-48 -mb-6 opacity-[0.02]"
-              style={{ 
-                background: 'radial-gradient(ellipse at center, rgba(91, 155, 213, 0.5) 0%, rgba(91, 155, 213, 0.01) 70%)'
-              }}
-            ></div>
-            
-            {/* Glowing corner accent */}
-            <div 
-              className="absolute -bottom-20 -right-20 w-40 h-40 rounded-full opacity-[0.04]"
-              style={{ 
-                background: colors.soft.blue,
-                filter: 'blur(30px)'
-              }}
-            ></div>
-          </div>
-          
-          {/* Header */}
-          <div 
-            className="p-4 relative border-b flex items-center justify-between"
-            style={{ borderColor: t.border }}
-          >
-            <div className="flex items-center">
-              <div 
-                className="h-9 w-9 flex items-center justify-center rounded-xl mr-3"
-                style={{ 
-                  background: `${colors.primary}10`,
-                  color: colors.primary
-                }}
-              >
-                <Sparkles size={18} />
-              </div>
-              <div>
-                <h3 
-                  className="font-light text-lg tracking-wide"
-                  style={{ color: t.text }}
-                >
-                  AI Assistent
-                </h3>
-                <p 
-                  className="text-xs tracking-wide"
-                  style={{ color: t.textSecondary }}
-                >
-                  Powered by Claude
-                </p>
-              </div>
-            </div>
-            
-            <button 
-              onClick={() => setAiAssistantOpen(false)}
-              className="h-8 w-8 flex items-center justify-center rounded-full"
-              style={{ 
-                background: t.bg,
-                color: t.textSecondary
-              }}
-            >
-              <X size={16} />
-            </button>
-            
-            {/* Accent line */}
-            <div 
-              className="absolute bottom-0 left-4 h-px w-16"
-              style={{ 
-                background: `linear-gradient(to right, ${colors.accent}, transparent)`,
-                opacity: 0.2
-              }}
-            ></div>
-          </div>
-          
-          {/* Chat Messages - Artistic Design */}
-          <div 
-            className="p-4 overflow-y-auto"
-            style={{ 
-              height: 'calc(100% - 132px)',
-              scrollBehavior: 'smooth'
-            }}
-          >
-            <div className="space-y-4">
-              {aiMessages.map(message => (
-                <div 
-                  key={message.id} 
-                  className="flex"
-                  style={{ 
-                    justifyContent: message.sender === 'user' ? 'flex-end' : 'flex-start',
-                    maxWidth: '100%'
-                  }}
-                >
-                  <div 
-                    style={{ 
-                      background: message.sender === 'user' ? 
-                        colors.gradients.primary : 
-                        `${t.bg}90`,
-                      color: message.sender === 'user' ? '#ffffff' : t.text,
-                      padding: '10px 16px',
-                      borderRadius: message.sender === 'user' ? 
-                        '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                      maxWidth: '85%',
-                      boxShadow: message.sender === 'user' ? 
-                        'none' : `0 1px 2px ${t.border}`,
-                      border: message.sender === 'user' ? 
-                        'none' : `1px solid ${t.border}`
-                    }}
-                  >
-                    <div 
-                      className="text-sm whitespace-pre-line"
-                      style={{ 
-                        fontWeight: 300,
-                        lineHeight: 1.5
-                      }}
-                    >
-                      {message.text}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          {/* Input Area - Artistic Design */}
-          <div 
-            className="p-4 absolute bottom-0 left-0 right-0 border-t"
-            style={{ borderColor: t.border }}
-          >
-            <div 
-              className="flex items-center rounded-xl p-1 pl-4"
-              style={{ 
-                background: t.bg,
-                border: `1px solid ${t.border}`
-              }}
-            >
-              <input 
-                type="text" 
-                placeholder="Nachricht an AI Assistent..." 
-                className="flex-1 bg-transparent border-none focus:outline-none text-sm"
-                style={{ 
-                  color: t.text,
-                  caretColor: colors.primary
-                }}
-              />
-              
-              <button 
-                className="h-9 w-9 flex items-center justify-center rounded-lg transition-colors"
-                style={{ 
-                  background: colors.primary,
-                  color: '#ffffff'
-                }}
-              >
-                <ArrowRight size={16} />
-              </button>
-            </div>
-            
-            <div 
-              className="mt-2 flex items-center justify-between text-xs"
-              style={{ color: t.textSecondary }}
-            >
-              <div className="flex items-center">
-                <Command className="h-3 w-3 mr-1" />
-                <span>+K für Befehle</span>
-              </div>
-              <button className="flex items-center">
-                <Mic className="h-3 w-3 mr-1" />
-                <span>Sprachmodus</span>
-              </button>
-            </div>
-          </div>
-        </div>
         
         {/* Main Content */}
         <main className="min-h-[calc(100vh-70px)] p-5 md:p-8">
