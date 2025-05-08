@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDataContext } from '../../backend/DataLoader';
+import { useAuth } from '../contexts/AuthContext';
+import TeamDisciplineScoreModal from '../components/TeamDisciplineScoreModal';
 import { 
   Trophy, 
   AlertTriangle, 
