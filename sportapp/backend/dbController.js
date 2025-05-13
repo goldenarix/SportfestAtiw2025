@@ -1223,5 +1223,6 @@ module.exports = {
   DisziplinController,
   ErgebnisController,
   getTableSchema,
+  SchuelerController,
   StationController
 };
