@@ -11,6 +11,7 @@ const {
   getTableSchema
 } = require('./dbController');
 
+const authController = require('./authController');
 // Middleware zur Fehlerbehandlung
 const asyncHandler = fn => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
