@@ -710,27 +710,66 @@ router.get('/all', asyncHandler(async (req, res) => {
 }));
 
 // ===== AUTHENTIFIZIERUNGS-ROUTEN =====
-// Wenn authController verfügbar ist, können Sie hier Authentifizierungsrouten hinzufügen
-// Beispiel:
-/*
+// ===== AUTHENTIFIZIERUNGS-ROUTEN =====
+// Importiere den Auth-Controller
 const authController = require('./authController');
 
+// Öffentliche Routen (ohne Authentifizierung)
 // Login-Routen
-router.post('/auth/login/betreuer', asyncHandler(authController.loginBetreuer));
-router.post('/auth/login/admin', asyncHandler(authController.loginAdmin));
+router.post('/auth/login/betreuer', asyncHandler(async (req, res) => {
+  await authController.loginBetreuer(req, res);
+}));
 
-// Registrierungsrouten (nur Admin)
-router.post('/auth/register/betreuer', 
-  authController.authenticateToken, 
-  authController.requireAdmin, 
-  asyncHandler(authController.registerBetreuer)
-);
+router.post('/auth/login/admin', asyncHandler(async (req, res) => {
+  await authController.loginAdmin(req, res);
+}));
 
-router.post('/auth/register/admin', 
-  authController.authenticateToken, 
-  authController.requireAdmin, 
-  asyncHandler(authController.registerAdmin)
-);
-*/
+// Registrierungsrouten
+router.post('/auth/register/betreuer', asyncHandler(async (req, res) => {
+  await authController.registerBetreuer(req, res);
+}));
+
+router.post('/auth/register/admin', asyncHandler(async (req, res) => {
+  await authController.registerAdmin(req, res);
+}));
+
+// Geschützte Routen - benötigen JWT Token
+// Middleware anwenden für alle auth/* Routen außer login und register
+router.use('/auth/(?!(login|register)).*', authController.authenticateToken);
+
+// Routen für alle authentifizierten Benutzer
+router.get('/auth/current-user', asyncHandler(async (req, res) => {
+  await authController.getCurrentUser(req, res);
+}));
+
+// Passwort-Änderung (für eigene Accounts oder von Admins)
+router.post('/auth/change-password/betreuer', asyncHandler(async (req, res) => {
+  await authController.changeBetreuerPassword(req, res);
+}));
+
+router.post('/auth/change-password/admin', asyncHandler(async (req, res) => {
+  await authController.changeAdminPassword(req, res);
+}));
+
+// Admin-only Routen - benötigen Admin-Rolle
+router.use('/auth/admin', authController.requireAdmin);
+
+// Benutzerverwaltungs-Routen (nur für Admins)
+router.get('/auth/admin/betreuer', asyncHandler(async (req, res) => {
+  await authController.getAllBetreuer(req, res);
+}));
+
+router.get('/auth/admin/admins', asyncHandler(async (req, res) => {
+  await authController.getAllAdmins(req, res);
+}));
+
+router.delete('/auth/admin/betreuer/:id', asyncHandler(async (req, res) => {
+  await authController.deleteBetreuer(req, res);
+}));
+
+router.delete('/auth/admin/admin/:id', asyncHandler(async (req, res) => {
+  await authController.deleteAdmin(req, res);
+}));
+
 
 module.exports = router;
