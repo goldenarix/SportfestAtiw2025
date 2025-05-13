@@ -85,7 +85,7 @@ const BetreuerController = {
     );
   },
   
-  // Create new betreuer with debugging and manual ID
+  // Create new betreuer with debugging and manual ID - now with ROLLE support
   create: async (betreuer) => {
     let connection;
     
@@ -105,20 +105,22 @@ const BetreuerController = {
       const nextId = getMaxIdResult.rows[0].NEXT_ID;
       console.log('Next Betreuer ID:', nextId);
       
-      // 2. Insert with explicit ID
-      const insertQuery = `INSERT INTO Betreuer (BETREUERID, NAME, PASSWORT) 
-                           VALUES (:id, :name, :passwort)`;
+      // 2. Insert with explicit ID - now includes ROLLE
+      const insertQuery = `INSERT INTO Betreuer (BETREUERID, NAME, PASSWORT, ROLLE) 
+                           VALUES (:id, :name, :passwort, :rolle)`;
       
       console.log('Insert query:', insertQuery);
       
       // Ensure we have values for required fields
       const name = betreuer.NAME || betreuer.name || 'Neuer Betreuer';
       const passwort = betreuer.PASSWORT || betreuer.passwort || 'password123';
+      const rolle = betreuer.ROLLE || betreuer.rolle || 'stationaer'; // Default to stationaer
       
       const binds = {
         id: nextId,
         name: name,
-        passwort: passwort
+        passwort: passwort,
+        rolle: rolle
       };
       
       console.log('Binds:', binds);
@@ -131,6 +133,7 @@ const BetreuerController = {
       
       console.log('Insert result:', insertResult);
       
+      // For simple cases, let the extended controller handle assignments
       return { 
         success: true, 
         id: nextId,
@@ -150,7 +153,7 @@ const BetreuerController = {
     }
   },
   
-  // Update betreuer with debugging
+  // Update betreuer with debugging - now with ROLLE support
   update: async (id, betreuer) => {
     console.log('Updating Betreuer:', id, betreuer);
     
@@ -173,6 +176,11 @@ const BetreuerController = {
       if (betreuer.PASSWORT !== undefined || betreuer.passwort !== undefined) {
         setClauses.push('PASSWORT = :passwort');
         binds.passwort = betreuer.PASSWORT || betreuer.passwort;
+      }
+      
+      if (betreuer.ROLLE !== undefined || betreuer.rolle !== undefined) {
+        setClauses.push('ROLLE = :rolle');
+        binds.rolle = betreuer.ROLLE || betreuer.rolle;
       }
       
       // Return early if no fields to update
@@ -212,7 +220,7 @@ const BetreuerController = {
     }
   },
   
-  // Delete betreuer with cascade check
+  // Delete betreuer with cascade delete for all associations
   delete: async (id) => {
     console.log('Deleting Betreuer with ID:', id);
     
@@ -221,38 +229,44 @@ const BetreuerController = {
     try {
       connection = await oracledb.getConnection('appPool');
       
-      // First check if there are related teams
-      const checkTeamsResult = await connection.execute(
-        'SELECT COUNT(*) as COUNT FROM Team WHERE BETREUERID = :id',
+      // Start transaction
+      await connection.execute('SET TRANSACTION READ WRITE');
+      
+      // First delete all associated disziplin records
+      const deleteDisziplinAssoc = await connection.execute(
+        'DELETE FROM BETREUER_DISZIPLIN WHERE BETREUERID = :id',
         [id],
-        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        { autoCommit: false }
       );
       
-      const count = checkTeamsResult.rows[0].COUNT;
-      console.log(`Found ${count} related Team records`);
+      console.log(`Deleted ${deleteDisziplinAssoc.rowsAffected} BETREUER_DISZIPLIN records`);
       
-      if (count > 0) {
-        // If there are related teams, you may want to prevent deletion
-        // or implement a cascade delete strategy
-        console.log('Cannot delete Betreuer with related Teams');
-        return { 
-          success: false, 
-          error: 'Cannot delete a Betreuer that has related Teams. Update or delete the Teams first.' 
-        };
-      }
+      // Then delete all associated team records
+      const deleteTeamAssoc = await connection.execute(
+        'DELETE FROM BETREUER_TEAM WHERE BETREUERID = :id',
+        [id],
+        { autoCommit: false }
+      );
       
-      // If no related teams, delete the betreuer
+      console.log(`Deleted ${deleteTeamAssoc.rowsAffected} BETREUER_TEAM records`);
+      
+      // Finally delete the betreuer
       const deleteResult = await connection.execute(
         'DELETE FROM Betreuer WHERE BETREUERID = :id',
         [id],
-        { autoCommit: true }
+        { autoCommit: false }
       );
       
       console.log(`Deleted ${deleteResult.rowsAffected} Betreuer records`);
       
+      // Commit transaction
+      await connection.commit();
+      
       return { 
         success: true, 
-        rowsDeleted: deleteResult.rowsAffected
+        rowsDeleted: deleteResult.rowsAffected,
+        disziplinAssocDeleted: deleteDisziplinAssoc.rowsAffected,
+        teamAssocDeleted: deleteTeamAssoc.rowsAffected
       };
     } catch (err) {
       console.error('Error deleting Betreuer:', err);
@@ -311,35 +325,32 @@ const TeamController = {
       const nextId = getMaxIdResult.rows[0].NEXT_ID;
       console.log('Next Team ID:', nextId);
       
-      // Check for required BETREUERID and set a default if needed
-      let betreuerID = team.BETREUERID;
-      if (!betreuerID) {
-        console.log('No BETREUERID provided, checking for default betreuer...');
-        const defaultBetreuerResult = await connection.execute(
-          'SELECT MIN(BETREUERID) as DEFAULT_ID FROM Betreuer',
-          [],
-          { outFormat: oracledb.OUT_FORMAT_OBJECT }
-        );
-        
-        if (defaultBetreuerResult.rows && defaultBetreuerResult.rows.length > 0) {
-          betreuerID = defaultBetreuerResult.rows[0].DEFAULT_ID;
-          console.log('Using default BETREUERID:', betreuerID);
-        }
-      }
-      
-      // 2. Insert with explicit ID
+      // 2. Insert with explicit ID - Note: BETREUERID column has been removed
       const insertResult = await connection.execute(
-        `INSERT INTO Team (TEAMID, NAME, BETREUERID) 
-         VALUES (:id, :name, :betreuerid)`,
+        `INSERT INTO Team (TEAMID, NAME) 
+         VALUES (:id, :name)`,
         {
           id: nextId,
-          name: team.NAME || 'Neues Team',
-          betreuerid: betreuerID
+          name: team.NAME || 'Neues Team'
         },
         { autoCommit: true }
       );
       
       console.log('Insert result:', insertResult);
+      
+      // 3. Add betreuer association if provided (uses new BETREUER_TEAM table)
+      if (team.BETREUERID) {
+        console.log('Adding betreuer association:', team.BETREUERID);
+        
+        await connection.execute(
+          'INSERT INTO BETREUER_TEAM (BETREUERID, TEAMID) VALUES (:betreuerid, :teamid)',
+          {
+            betreuerid: team.BETREUERID,
+            teamid: nextId
+          },
+          { autoCommit: true }
+        );
+      }
       
       return { 
         success: true, 
@@ -360,37 +371,92 @@ const TeamController = {
     }
   },
   
-  // Update team with debugging
+  // Update team with debugging - Now handles betreuer associations separately
   update: async (id, team) => {
     console.log('Updating Team:', id, team);
+    let connection;
     
-    // Handle the case when betreuerID might be missing
-    const updateFields = [];
-    const binds = { id: id };
-    
-    if (team.NAME !== undefined) {
-      updateFields.push('NAME = :name');
-      binds.name = team.NAME;
+    try {
+      // Get connection directly for better control
+      connection = await oracledb.getConnection('appPool');
+
+      // Update team name if provided
+      if (team.NAME !== undefined) {
+        const updateQuery = 'UPDATE Team SET NAME = :name WHERE TEAMID = :id';
+        console.log('Update query:', updateQuery);
+        
+        const updateResult = await connection.execute(
+          updateQuery,
+          { name: team.NAME, id: id },
+          { autoCommit: false }
+        );
+        
+        console.log('Update team result:', updateResult);
+      }
+      
+      // Handle betreuer association update if provided
+      if (team.BETREUERID !== undefined) {
+        // First check if association already exists
+        const checkResult = await connection.execute(
+          'SELECT COUNT(*) as COUNT FROM BETREUER_TEAM WHERE BETREUERID = :betreuerid AND TEAMID = :teamid',
+          { betreuerid: team.BETREUERID, teamid: id },
+          { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        
+        const exists = checkResult.rows[0].COUNT > 0;
+        
+        if (!exists) {
+          // First delete any existing associations
+          await connection.execute(
+            'DELETE FROM BETREUER_TEAM WHERE TEAMID = :id',
+            [id],
+            { autoCommit: false }
+          );
+          
+          // Then create the new association
+          await connection.execute(
+            'INSERT INTO BETREUER_TEAM (BETREUERID, TEAMID) VALUES (:betreuerid, :teamid)',
+            { betreuerid: team.BETREUERID, teamid: id },
+            { autoCommit: false }
+          );
+          
+          console.log('Updated betreuer association for team');
+        } else {
+          console.log('Betreuer association already exists, no change needed');
+        }
+      }
+      
+      // Commit the transaction
+      await connection.commit();
+      
+      return { 
+        success: true,
+        message: 'Team updated successfully'
+      };
+    } catch (err) {
+      // Rollback in case of error
+      if (connection) {
+        try {
+          await connection.rollback();
+        } catch (rollbackErr) {
+          console.error('Error during rollback:', rollbackErr);
+        }
+      }
+      
+      console.error('Error updating Team:', err);
+      return { success: false, error: err.message };
+    } finally {
+      if (connection) {
+        try {
+          await connection.close();
+        } catch (err) {
+          console.error('Error closing connection:', err);
+        }
+      }
     }
-    
-    if (team.BETREUERID !== undefined) {
-      updateFields.push('BETREUERID = :betreuerid');
-      binds.betreuerid = team.BETREUERID;
-    }
-    
-    if (updateFields.length === 0) {
-      console.log('No fields to update');
-      return { success: false, error: 'No fields to update' };
-    }
-    
-    const query = `UPDATE Team SET ${updateFields.join(', ')} WHERE TEAMID = :id`;
-    console.log('Update query:', query);
-    console.log('Binds:', binds);
-    
-    return await executeQuery(query, binds, { autoCommit: true });
   },
   
-  // Delete team with debugging
+  // Delete team with cascade delete for all associations
   delete: async (id) => {
     console.log('Deleting Team with ID:', id);
     
@@ -399,28 +465,37 @@ const TeamController = {
     try {
       connection = await oracledb.getConnection('appPool');
       
-      // First check if there are related records
-      const checkErgebnisResult = await connection.execute(
-        'SELECT COUNT(*) as COUNT FROM Ergebnis WHERE TEAMID = :id',
+      // Start transaction
+      await connection.execute('SET TRANSACTION READ WRITE');
+      
+      // First delete team-student associations
+      const deleteTeamStudentResult = await connection.execute(
+        'DELETE FROM TEAM_SCHUELER WHERE TEAMID = :id',
         [id],
-        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        { autoCommit: false }
       );
       
-      const count = checkErgebnisResult.rows[0].COUNT;
-      console.log(`Found ${count} related Ergebnis records`);
+      console.log(`Deleted ${deleteTeamStudentResult.rowsAffected} TEAM_SCHUELER records`);
       
-      if (count > 0) {
-        // First delete related ergebnis records
-        const deleteErgebnisResult = await connection.execute(
-          'DELETE FROM Ergebnis WHERE TEAMID = :id',
-          [id],
-          { autoCommit: false }
-        );
-        
-        console.log(`Deleted ${deleteErgebnisResult.rowsAffected} related Ergebnis records`);
-      }
+      // Delete betreuer-team associations
+      const deleteBetreuerTeamResult = await connection.execute(
+        'DELETE FROM BETREUER_TEAM WHERE TEAMID = :id',
+        [id],
+        { autoCommit: false }
+      );
       
-      // Then delete the team
+      console.log(`Deleted ${deleteBetreuerTeamResult.rowsAffected} BETREUER_TEAM records`);
+      
+      // Delete related ergebnis records
+      const deleteErgebnisResult = await connection.execute(
+        'DELETE FROM Ergebnis WHERE TEAMID = :id',
+        [id],
+        { autoCommit: false }
+      );
+      
+      console.log(`Deleted ${deleteErgebnisResult.rowsAffected} Ergebnis records`);
+      
+      // Finally delete the team
       const deleteTeamResult = await connection.execute(
         'DELETE FROM Team WHERE TEAMID = :id',
         [id],
@@ -435,7 +510,9 @@ const TeamController = {
       return { 
         success: true, 
         teamRowsDeleted: deleteTeamResult.rowsAffected,
-        ergebnisRowsDeleted: count
+        ergebnisRowsDeleted: deleteErgebnisResult.rowsAffected,
+        teamStudentRowsDeleted: deleteTeamStudentResult.rowsAffected,
+        betreuerTeamRowsDeleted: deleteBetreuerTeamResult.rowsAffected
       };
     } catch (err) {
       // Rollback in case of error
@@ -556,7 +633,19 @@ const DisziplinController = {
       console.log('Deleting Disziplin with ID:', id);
       connection = await oracledb.getConnection('appPool');
       
-      // First delete related ergebnis records
+      // Start transaction
+      await connection.execute('SET TRANSACTION READ WRITE');
+      
+      // First delete betreuer-disziplin associations
+      const deleteBetreuerDisziplinResult = await connection.execute(
+        'DELETE FROM BETREUER_DISZIPLIN WHERE DISZIPLINID = :id',
+        [id],
+        { autoCommit: false }
+      );
+      
+      console.log(`Deleted ${deleteBetreuerDisziplinResult.rowsAffected} BETREUER_DISZIPLIN records`);
+      
+      // Delete related ergebnis records
       const deleteErgebnisResult = await connection.execute(
         'DELETE FROM Ergebnis WHERE DISZIPLINID = :id',
         [id],
@@ -580,7 +669,8 @@ const DisziplinController = {
       return { 
         success: true, 
         ergebnisRowsDeleted: deleteErgebnisResult.rowsAffected,
-        disziplinRowsDeleted: deleteDisziplinResult.rowsAffected
+        disziplinRowsDeleted: deleteDisziplinResult.rowsAffected,
+        betreuerDisziplinRowsDeleted: deleteBetreuerDisziplinResult.rowsAffected
       };
     } catch (err) {
       // Rollback in case of error

@@ -1,4 +1,4 @@
-// routes.js
+// routes.js - Konsolidierte Routen-Definitionen
 const express = require('express');
 const router = express.Router();
 const {
@@ -6,141 +6,315 @@ const {
   TeamController,
   DisziplinController,
   ErgebnisController,
+  SchuelerController,
   StationController,
   getTableSchema
 } = require('./dbController');
-const authController = require('./authController');
 
-// Middleware to handle errors
+// Middleware zur Fehlerbehandlung
 const asyncHandler = fn => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
-// ===== AUTHENTICATION ROUTES =====
-// Login routes
-router.post('/auth/login/betreuer', asyncHandler(authController.loginBetreuer));
-router.post('/auth/login/admin', asyncHandler(authController.loginAdmin));
-
-// Registration routes (admin only can create other users)
-router.post('/auth/register/betreuer', 
-  authController.authenticateToken, 
-  authController.requireAdmin, 
-  asyncHandler(authController.registerBetreuer)
-);
-router.post('/auth/register/admin', 
-  authController.authenticateToken, 
-  authController.requireAdmin, 
-  asyncHandler(authController.registerAdmin)
-);
-
-// User management routes
-router.get('/auth/me', 
-  authController.authenticateToken, 
-  authController.getCurrentUser
-);
-
-router.get('/auth/betreuer', 
-  authController.authenticateToken, 
-  authController.requireAdmin,
-  asyncHandler(authController.getAllBetreuer)
-);
-
-router.get('/auth/admins', 
-  authController.authenticateToken, 
-  authController.requireAdmin,
-  asyncHandler(authController.getAllAdmins)
-);
-
-// Password management
-router.put('/auth/betreuer/password', 
-  authController.authenticateToken, 
-  asyncHandler(authController.changeBetreuerPassword)
-);
-
-router.put('/auth/admin/password', 
-  authController.authenticateToken, 
-  asyncHandler(authController.changeAdminPassword)
-);
-
-// Delete accounts (admin only)
-router.delete('/auth/betreuer/:id', 
-  authController.authenticateToken, 
-  authController.requireAdmin,
-  asyncHandler(authController.deleteBetreuer)
-);
-
-router.delete('/auth/admin/:id', 
-  authController.authenticateToken, 
-  authController.requireAdmin,
-  asyncHandler(authController.deleteAdmin)
-);
-
-// Get table schema information
-router.get('/schema/:tableName', asyncHandler(async (req, res) => {
-  const result = await getTableSchema(req.params.tableName);
+// ===== SCHÜLER-ROUTEN =====
+// Alle Schüler abrufen
+router.get('/schueler', asyncHandler(async (req, res) => {
+  const result = await SchuelerController.getAll();
+  
   if (result.success) {
     res.json(result);
   } else {
-    res.status(500).json(result);
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Fehler beim Abrufen der Schüler'
+    });
   }
 }));
 
-// BETREUER ROUTES
-// Get all betreuer
+// Schüler nach ID abrufen
+router.get('/schueler/:id', asyncHandler(async (req, res) => {
+  const result = await SchuelerController.getById(req.params.id);
+  
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(404).json({
+      success: false,
+      error: result.error || 'Schüler nicht gefunden'
+    });
+  }
+}));
+
+// Schüler nach Team-ID abrufen
+router.get('/schueler/team/:teamId', asyncHandler(async (req, res) => {
+  const result = await SchuelerController.getByTeamId(req.params.teamId);
+  
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Fehler beim Abrufen der Schüler für das Team'
+    });
+  }
+}));
+
+// Neuen Schüler erstellen
+router.post('/schueler', asyncHandler(async (req, res) => {
+  const result = await SchuelerController.create(req.body);
+  
+  if (result.success) {
+    res.status(201).json(result);
+  } else {
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Fehler beim Erstellen des Schülers'
+    });
+  }
+}));
+
+// Schüler aktualisieren
+router.put('/schueler/:id', asyncHandler(async (req, res) => {
+  const result = await SchuelerController.update(req.params.id, req.body);
+  
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Fehler beim Aktualisieren des Schülers'
+    });
+  }
+}));
+
+// Schüler löschen
+router.delete('/schueler/:id', asyncHandler(async (req, res) => {
+  const result = await SchuelerController.delete(req.params.id);
+  
+  if (result.success) {
+    res.json({
+      success: true,
+      message: 'Schüler erfolgreich gelöscht'
+    });
+  } else {
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Fehler beim Löschen des Schülers'
+    });
+  }
+}));
+
+// ===== BETREUER-ROUTEN =====
+// Alle Betreuer abrufen
 router.get('/betreuer', asyncHandler(async (req, res) => {
-  const result = await BetreuerController.getAll();
+  // Prüfen, ob erweiterte Daten angefordert werden
+  const withAssignments = req.query.withAssignments === 'true';
+  
+  let result;
+  if (withAssignments) {
+    result = await BetreuerController.getAllWithAssignments();
+  } else {
+    result = await BetreuerController.getAll();
+  }
+  
   if (result.success) {
     res.json(result);
   } else {
-    res.status(500).json(result);
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Fehler beim Abrufen der Betreuer'
+    });
   }
 }));
 
-// Get betreuer by ID
+// Betreuer nach ID abrufen
 router.get('/betreuer/:id', asyncHandler(async (req, res) => {
-  const result = await BetreuerController.getById(req.params.id);
+  // Prüfen, ob erweiterte Daten angefordert werden
+  const withAssignments = req.query.withAssignments === 'true';
+  
+  let result;
+  if (withAssignments) {
+    result = await BetreuerController.getByIdWithAssignments(req.params.id);
+  } else {
+    result = await BetreuerController.getById(req.params.id);
+  }
+  
   if (result.success) {
-    if (result.data.length === 0) {
-      res.status(404).json({ success: false, error: 'Betreuer not found' });
+    if (!result.data || (Array.isArray(result.data) && result.data.length === 0)) {
+      res.status(404).json({
+        success: false,
+        error: 'Betreuer nicht gefunden'
+      });
     } else {
       res.json(result);
     }
   } else {
-    res.status(500).json(result);
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Fehler beim Abrufen des Betreuers'
+    });
   }
 }));
 
-// Create betreuer
+// Neuen Betreuer erstellen
 router.post('/betreuer', asyncHandler(async (req, res) => {
   const result = await BetreuerController.create(req.body);
+  
   if (result.success) {
     res.status(201).json(result);
   } else {
-    res.status(500).json(result);
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Fehler beim Erstellen des Betreuers'
+    });
   }
 }));
 
-// Update betreuer
+// Betreuer aktualisieren
 router.put('/betreuer/:id', asyncHandler(async (req, res) => {
   const result = await BetreuerController.update(req.params.id, req.body);
+  
   if (result.success) {
     res.json(result);
   } else {
-    res.status(500).json(result);
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Fehler beim Aktualisieren des Betreuers'
+    });
   }
 }));
 
-// Delete betreuer
+// Betreuer löschen
 router.delete('/betreuer/:id', asyncHandler(async (req, res) => {
   const result = await BetreuerController.delete(req.params.id);
+  
   if (result.success) {
     res.json(result);
   } else {
-    res.status(500).json(result);
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Fehler beim Löschen des Betreuers'
+    });
   }
 }));
 
-// TEAM ROUTES
-// Get all teams
+// Disziplinen für Betreuer abrufen
+router.get('/betreuer/:id/disziplinen', asyncHandler(async (req, res) => {
+  const result = await BetreuerController.getDisziplinenByBetreuer(req.params.id);
+  
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Fehler beim Abrufen der Disziplinen für den Betreuer'
+    });
+  }
+}));
+
+// Disziplinen für Betreuer festlegen
+router.post('/betreuer/:id/disziplinen', asyncHandler(async (req, res) => {
+  if (!req.body.disziplinen || !Array.isArray(req.body.disziplinen)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Request muss ein disziplinen Array enthalten'
+    });
+  }
+  
+  // Betreuer-Details abrufen, um Rolle zu prüfen
+  const betreuerResult = await BetreuerController.getByIdWithAssignments(req.params.id);
+  
+  if (!betreuerResult.success) {
+    return res.status(500).json({
+      success: false,
+      error: betreuerResult.error || 'Fehler beim Abrufen des Betreuers'
+    });
+  }
+  
+  // Update mit geänderten Feldern
+  const updateData = {
+    disziplinen: req.body.disziplinen
+  };
+  
+  // Rolle auf stationaer setzen, wenn nötig
+  if (betreuerResult.data.ROLLE !== 'stationaer') {
+    updateData.ROLLE = 'stationaer';
+  }
+  
+  const updateResult = await BetreuerController.update(req.params.id, updateData);
+  
+  if (updateResult.success) {
+    res.json({
+      success: true,
+      message: `${req.body.disziplinen.length} Disziplin(en) dem Betreuer zugewiesen`
+    });
+  } else {
+    res.status(500).json({
+      success: false,
+      error: updateResult.error || 'Fehler beim Aktualisieren des Betreuers'
+    });
+  }
+}));
+
+// Teams für Betreuer abrufen
+router.get('/betreuer/:id/teams', asyncHandler(async (req, res) => {
+  const result = await BetreuerController.getTeamsByBetreuer(req.params.id);
+  
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Fehler beim Abrufen der Teams für den Betreuer'
+    });
+  }
+}));
+
+// Teams für Betreuer festlegen
+router.post('/betreuer/:id/teams', asyncHandler(async (req, res) => {
+  if (!req.body.teams || !Array.isArray(req.body.teams)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Request muss ein teams Array enthalten'
+    });
+  }
+  
+  // Betreuer-Details abrufen, um Rolle zu prüfen
+  const betreuerResult = await BetreuerController.getByIdWithAssignments(req.params.id);
+  
+  if (!betreuerResult.success) {
+    return res.status(500).json({
+      success: false,
+      error: betreuerResult.error || 'Fehler beim Abrufen des Betreuers'
+    });
+  }
+  
+  // Update mit geänderten Feldern
+  const updateData = {
+    teams: req.body.teams
+  };
+  
+  // Rolle auf laufend setzen, wenn nötig
+  if (betreuerResult.data.ROLLE !== 'laufend') {
+    updateData.ROLLE = 'laufend';
+  }
+  
+  const updateResult = await BetreuerController.update(req.params.id, updateData);
+  
+  if (updateResult.success) {
+    res.json({
+      success: true,
+      message: `${req.body.teams.length} Team(s) dem Betreuer zugewiesen`
+    });
+  } else {
+    res.status(500).json({
+      success: false,
+      error: updateResult.error || 'Fehler beim Aktualisieren des Betreuers'
+    });
+  }
+}));
+
+// ===== TEAM-ROUTEN =====
+// Alle Teams abrufen
 router.get('/teams', asyncHandler(async (req, res) => {
   const result = await TeamController.getAll();
   if (result.success) {
@@ -150,12 +324,12 @@ router.get('/teams', asyncHandler(async (req, res) => {
   }
 }));
 
-// Get team by ID
+// Team nach ID abrufen
 router.get('/teams/:id', asyncHandler(async (req, res) => {
   const result = await TeamController.getById(req.params.id);
   if (result.success) {
     if (result.data.length === 0) {
-      res.status(404).json({ success: false, error: 'Team not found' });
+      res.status(404).json({ success: false, error: 'Team nicht gefunden' });
     } else {
       res.json(result);
     }
@@ -164,7 +338,7 @@ router.get('/teams/:id', asyncHandler(async (req, res) => {
   }
 }));
 
-// Create team
+// Neues Team erstellen
 router.post('/teams', asyncHandler(async (req, res) => {
   const result = await TeamController.create(req.body);
   if (result.success) {
@@ -174,7 +348,7 @@ router.post('/teams', asyncHandler(async (req, res) => {
   }
 }));
 
-// Update team
+// Team aktualisieren
 router.put('/teams/:id', asyncHandler(async (req, res) => {
   const result = await TeamController.update(req.params.id, req.body);
   if (result.success) {
@@ -184,7 +358,7 @@ router.put('/teams/:id', asyncHandler(async (req, res) => {
   }
 }));
 
-// Delete team
+// Team löschen
 router.delete('/teams/:id', asyncHandler(async (req, res) => {
   const result = await TeamController.delete(req.params.id);
   if (result.success) {
@@ -194,105 +368,54 @@ router.delete('/teams/:id', asyncHandler(async (req, res) => {
   }
 }));
 
-// Get students for a specific team
+// Schüler für Team abrufen
 router.get('/teams/:id/students', asyncHandler(async (req, res) => {
-  try {
-    const teamId = req.params.id;
-    
-    // Query to get students associated with this team
-    const query = `
-      SELECT s.* 
-      FROM SCHUELER s
-      JOIN TEAM_SCHUELER ts ON s.SCHUELERID = ts.SCHUELERID
-      WHERE ts.TEAMID = :teamId
-      ORDER BY s.NAME, s.VORNAME
-    `;
-    
-    const { executeQuery } = require('./dbController');
-    const result = await executeQuery(query, [teamId]);
-    
-    if (result.success) {
-      res.json({
-        success: true,
-        data: result.data || []
-      });
-    } else {
-      throw new Error(result.error || 'Failed to retrieve team students');
-    }
-  } catch (err) {
-    console.error('Error getting team students:', err);
+  const result = await SchuelerController.getByTeamId(req.params.id);
+  
+  if (result.success) {
+    res.json(result);
+  } else {
     res.status(500).json({
       success: false,
-      error: err.message
+      error: result.error || 'Fehler beim Abrufen der Schüler für das Team'
     });
   }
 }));
 
-// Update/set students for a team
+// Schüler zu Team zuweisen
 router.post('/teams/:id/students', asyncHandler(async (req, res) => {
+  const teamId = req.params.id;
+  const { studentIds } = req.body;
+  
+  if (!studentIds || !Array.isArray(studentIds)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Request muss ein studentIds Array enthalten'
+    });
+  }
+  
+  // Jeder Schüler wird dem Team zugewiesen
+  const promises = studentIds.map(studentId => 
+    SchuelerController.update(studentId, { teamId })
+  );
+  
   try {
-    const teamId = req.params.id;
-    const { studentIds } = req.body;
+    await Promise.all(promises);
     
-    if (!studentIds || !Array.isArray(studentIds)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid request: studentIds array is required'
-      });
-    }
-    
-    const { getConnection, executeQuery } = require('./dbController');
-    
-    // Start a transaction
-    const connection = await getConnection();
-    
-    try {
-      // First delete all existing associations for this team
-      await executeQuery(
-        'DELETE FROM TEAM_SCHUELER WHERE TEAMID = :teamId',
-        [teamId]
-      );
-      
-      // Then insert new associations
-      if (studentIds.length > 0) {
-        // Insert each student-team association
-        for (const studentId of studentIds) {
-          await executeQuery(
-            'INSERT INTO TEAM_SCHUELER (TEAMID, SCHUELERID) VALUES (:teamId, :studentId)',
-            [teamId, studentId]
-          );
-        }
-      }
-      
-      res.json({
-        success: true,
-        message: `Updated team students. Added ${studentIds.length} students to team ${teamId}.`
-      });
-    } catch (err) {
-      // Rollback transaction in case of error
-      await connection.rollback();
-      throw err;
-    } finally {
-      // Release connection
-      if (connection) {
-        try {
-          await connection.close();
-        } catch (err) {
-          console.error('Error closing connection:', err);
-        }
-      }
-    }
+    res.json({
+      success: true,
+      message: `${studentIds.length} Schüler dem Team zugewiesen`
+    });
   } catch (err) {
-    console.error('Error updating team students:', err);
     res.status(500).json({
       success: false,
-      error: err.message
+      error: err.message || 'Fehler beim Zuweisen der Schüler zum Team'
     });
   }
 }));
 
-// DISZIPLIN ROUTES
-// Get all disziplins
+// ===== DISZIPLIN-ROUTEN =====
+// Alle Disziplinen abrufen
 router.get('/disziplins', asyncHandler(async (req, res) => {
   const result = await DisziplinController.getAll();
   if (result.success) {
@@ -302,12 +425,12 @@ router.get('/disziplins', asyncHandler(async (req, res) => {
   }
 }));
 
-// Get disziplin by ID
+// Disziplin nach ID abrufen
 router.get('/disziplins/:id', asyncHandler(async (req, res) => {
   const result = await DisziplinController.getById(req.params.id);
   if (result.success) {
     if (result.data.length === 0) {
-      res.status(404).json({ success: false, error: 'Disziplin not found' });
+      res.status(404).json({ success: false, error: 'Disziplin nicht gefunden' });
     } else {
       res.json(result);
     }
@@ -316,7 +439,7 @@ router.get('/disziplins/:id', asyncHandler(async (req, res) => {
   }
 }));
 
-// Create disziplin
+// Neue Disziplin erstellen
 router.post('/disziplins', asyncHandler(async (req, res) => {
   const result = await DisziplinController.create(req.body);
   if (result.success) {
@@ -326,7 +449,7 @@ router.post('/disziplins', asyncHandler(async (req, res) => {
   }
 }));
 
-// Update disziplin
+// Disziplin aktualisieren
 router.put('/disziplins/:id', asyncHandler(async (req, res) => {
   const result = await DisziplinController.update(req.params.id, req.body);
   if (result.success) {
@@ -336,7 +459,7 @@ router.put('/disziplins/:id', asyncHandler(async (req, res) => {
   }
 }));
 
-// Delete disziplin
+// Disziplin löschen
 router.delete('/disziplins/:id', asyncHandler(async (req, res) => {
   const result = await DisziplinController.delete(req.params.id);
   if (result.success) {
@@ -346,8 +469,8 @@ router.delete('/disziplins/:id', asyncHandler(async (req, res) => {
   }
 }));
 
-// ERGEBNIS ROUTES
-// Get all ergebnis
+// ===== ERGEBNIS-ROUTEN =====
+// Alle Ergebnisse abrufen
 router.get('/ergebnisse', asyncHandler(async (req, res) => {
   const result = await ErgebnisController.getAll();
   if (result.success) {
@@ -357,12 +480,12 @@ router.get('/ergebnisse', asyncHandler(async (req, res) => {
   }
 }));
 
-// Get ergebnis by ID
+// Ergebnis nach ID abrufen
 router.get('/ergebnisse/:id', asyncHandler(async (req, res) => {
   const result = await ErgebnisController.getById(req.params.id);
   if (result.success) {
     if (result.data.length === 0) {
-      res.status(404).json({ success: false, error: 'Ergebnis not found' });
+      res.status(404).json({ success: false, error: 'Ergebnis nicht gefunden' });
     } else {
       res.json(result);
     }
@@ -371,7 +494,7 @@ router.get('/ergebnisse/:id', asyncHandler(async (req, res) => {
   }
 }));
 
-// Get ergebnis by team ID
+// Ergebnisse nach Team-ID abrufen
 router.get('/ergebnisse/team/:teamId', asyncHandler(async (req, res) => {
   const result = await ErgebnisController.getByTeamId(req.params.teamId);
   if (result.success) {
@@ -381,7 +504,7 @@ router.get('/ergebnisse/team/:teamId', asyncHandler(async (req, res) => {
   }
 }));
 
-// Get ergebnis by disziplin ID
+// Ergebnisse nach Disziplin-ID abrufen
 router.get('/ergebnisse/disziplin/:disziplinId', asyncHandler(async (req, res) => {
   const result = await ErgebnisController.getByDisziplinId(req.params.disziplinId);
   if (result.success) {
@@ -391,7 +514,7 @@ router.get('/ergebnisse/disziplin/:disziplinId', asyncHandler(async (req, res) =
   }
 }));
 
-// Create ergebnis
+// Neues Ergebnis erstellen
 router.post('/ergebnisse', asyncHandler(async (req, res) => {
   const result = await ErgebnisController.create(req.body);
   if (result.success) {
@@ -401,7 +524,7 @@ router.post('/ergebnisse', asyncHandler(async (req, res) => {
   }
 }));
 
-// Update ergebnis
+// Ergebnis aktualisieren
 router.put('/ergebnisse/:id', asyncHandler(async (req, res) => {
   const result = await ErgebnisController.update(req.params.id, req.body);
   if (result.success) {
@@ -411,7 +534,7 @@ router.put('/ergebnisse/:id', asyncHandler(async (req, res) => {
   }
 }));
 
-// Delete ergebnis
+// Ergebnis löschen
 router.delete('/ergebnisse/:id', asyncHandler(async (req, res) => {
   const result = await ErgebnisController.delete(req.params.id);
   if (result.success) {
@@ -421,27 +544,31 @@ router.delete('/ergebnisse/:id', asyncHandler(async (req, res) => {
   }
 }));
 
-
-
-
-
-
-
-
-
-
-
-// Stations routes
+// ===== STATION-ROUTEN =====
+// Alle Stationen abrufen
 router.get('/stations', StationController.getAll);
+// Station nach ID abrufen
 router.get('/stations/:id', StationController.getById);
-router.post('/stations', authController.authenticateToken, StationController.create);
-router.put('/stations/:id', authController.authenticateToken, StationController.update);
-router.delete('/stations/:id', authController.authenticateToken, StationController.delete);
+// Neue Station erstellen
+router.post('/stations', StationController.create);
+// Station aktualisieren
+router.put('/stations/:id', StationController.update);
+// Station löschen
+router.delete('/stations/:id', StationController.delete);
 
+// ===== SCHEMAINFO-ROUTE =====
+// Schema-Informationen abrufen
+router.get('/schema/:tableName', asyncHandler(async (req, res) => {
+  const result = await getTableSchema(req.params.tableName);
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(500).json(result);
+  }
+}));
 
-// Add this to your routes.js file
-
-// Save student points (scores)
+// ===== STUDENTPOINTS-ROUTE =====
+// Schülerpunkte speichern
 router.post('/studentpoints', asyncHandler(async (req, res) => {
   try {
     const { scores } = req.body;
@@ -453,20 +580,20 @@ router.post('/studentpoints', asyncHandler(async (req, res) => {
       });
     }
     
-    // Array to store results
+    // Array für Ergebnisse
     const results = [];
     
-    // Process each score entry
+    // Jeden Punkteeintrag verarbeiten
     for (const score of scores) {
-      // Validate required fields
+      // Pflichtfelder prüfen
       if (!score.SCHUELERID || !score.DISZIPLINID || score.PUNKTE === undefined || score.PUNKTE === null) {
         return res.status(400).json({
           success: false,
-          error: 'Jeder Punkteintrag muss SCHUELERID, DISZIPLINID und PUNKTE enthalten'
+          error: 'Jeder Punkteeintrag muss SCHUELERID, DISZIPLINID und PUNKTE enthalten'
         });
       }
       
-      // Check if an entry already exists for this student and discipline
+      // Prüfen, ob bereits ein Eintrag für diesen Schüler und diese Disziplin existiert
       const existingResult = await ErgebnisController.getByStudentAndDiscipline(
         score.SCHUELERID, 
         score.DISZIPLINID
@@ -475,7 +602,7 @@ router.post('/studentpoints', asyncHandler(async (req, res) => {
       let result;
       
       if (existingResult.success && existingResult.data.length > 0) {
-        // Update existing record
+        // Vorhandenen Eintrag aktualisieren
         const existingId = existingResult.data[0].ERGEBNISID;
         result = await ErgebnisController.update(existingId, {
           SCHUELERID: score.SCHUELERID,
@@ -484,7 +611,7 @@ router.post('/studentpoints', asyncHandler(async (req, res) => {
           TEAMID: score.TEAMID
         });
       } else {
-        // Create new record
+        // Neuen Eintrag erstellen
         result = await ErgebnisController.create({
           SCHUELERID: score.SCHUELERID,
           DISZIPLINID: score.DISZIPLINID,
@@ -496,7 +623,7 @@ router.post('/studentpoints', asyncHandler(async (req, res) => {
       if (result.success) {
         results.push(result.data);
       } else {
-        // If any score fails to save, return an error
+        // Fehler, wenn ein Punkteeintrag nicht gespeichert werden kann
         return res.status(500).json({
           success: false,
           error: `Fehler beim Speichern der Punkte für Schüler ${score.SCHUELERID}: ${result.error}`
@@ -514,82 +641,96 @@ router.post('/studentpoints', asyncHandler(async (req, res) => {
     console.error('Error saving student points:', err);
     res.status(500).json({
       success: false,
-      error: 'Server error',
+      error: 'Server-Fehler',
       message: err.message
     });
   }
 }));
 
-// Get data from all tables at once
+// ===== ALL-ROUTE =====
+// Daten von allen Tabellen auf einmal abrufen
 router.get('/all', asyncHandler(async (req, res) => {
-    try {
-      // Run all queries in parallel for better performance
-      const [betreuerResult, teamsResult, disziplinsResult, ergebnisseResult, studentsResult, teamStudentsResult] = await Promise.all([
-        BetreuerController.getAll(),
-        TeamController.getAll(),
-        DisziplinController.getAll(),
-        ErgebnisController.getAll(),
-        // Add queries for students and team-student relationships
-        db.query("SELECT * FROM schueler"),
-        db.query("SELECT * FROM team_schueler")
-      ]);
+  try {
+    // Alle Abfragen parallel ausführen
+    const [
+      betreuerResult, 
+      teamsResult, 
+      disziplinsResult, 
+      ergebnisseResult, 
+      studentsResult
+    ] = await Promise.all([
+      BetreuerController.getAll(),
+      TeamController.getAll(),
+      DisziplinController.getAll(),
+      ErgebnisController.getAll(),
+      SchuelerController.getAll()
+    ]);
+    
+    // Prüfen, ob alle Abfragen erfolgreich waren
+    if (betreuerResult.success && 
+        teamsResult.success && 
+        disziplinsResult.success && 
+        ergebnisseResult.success && 
+        studentsResult.success) {
       
-      // Check if all queries were successful
-      if (betreuerResult.success && teamsResult.success && 
-          disziplinsResult.success && ergebnisseResult.success && 
-          studentsResult && teamStudentsResult) {
-        
-        // Return all data in a single response
-        res.json({
-          success: true,
-          data: {
-            betreuer: betreuerResult.data,
-            teams: teamsResult.data,
-            disziplins: disziplinsResult.data,
-            ergebnisse: ergebnisseResult.data,
-            students: studentsResult.rows || [],
-            teamStudents: teamStudentsResult.rows || [],
-            studentScores: ergebnisseResult.data.filter(result => result.SCHUELERID)
-          }
-        });
-      } else {
-        // Collect errors from failed queries
-        const errors = [];
-        if (!betreuerResult.success) errors.push(`Betreuer: ${betreuerResult.error}`);
-        if (!teamsResult.success) errors.push(`Teams: ${teamsResult.error}`);
-        if (!disziplinsResult.success) errors.push(`Disziplins: ${disziplinsResult.error}`);
-        if (!ergebnisseResult.success) errors.push(`Ergebnisse: ${ergebnisseResult.error}`);
-        
-        res.status(500).json({
-          success: false,
-          error: 'Failed to retrieve all data',
-          details: errors
-        });
-      }
-    } catch (err) {
+      // Alle Daten in einer Antwort zurückgeben
+      res.json({
+        success: true,
+        data: {
+          betreuer: betreuerResult.data || [],
+          teams: teamsResult.data || [],
+          disziplins: disziplinsResult.data || [],
+          ergebnisse: ergebnisseResult.data || [],
+          students: studentsResult.data || [],
+          studentScores: (ergebnisseResult.data || []).filter(result => result.SCHUELERID)
+        }
+      });
+    } else {
+      // Fehler aus fehlgeschlagenen Abfragen sammeln
+      const errors = [];
+      if (!betreuerResult.success) errors.push(`Betreuer: ${betreuerResult.error}`);
+      if (!teamsResult.success) errors.push(`Teams: ${teamsResult.error}`);
+      if (!disziplinsResult.success) errors.push(`Disziplins: ${disziplinsResult.error}`);
+      if (!ergebnisseResult.success) errors.push(`Ergebnisse: ${ergebnisseResult.error}`);
+      if (!studentsResult.success) errors.push(`Students: ${studentsResult.error}`);
+      
       res.status(500).json({
         success: false,
-        error: 'Server error',
-        message: err.message
+        error: 'Fehler beim Abrufen aller Daten',
+        details: errors
       });
     }
-  }));
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: 'Server-Fehler',
+      message: err.message
+    });
+  }
+}));
 
+// ===== AUTHENTIFIZIERUNGS-ROUTEN =====
+// Wenn authController verfügbar ist, können Sie hier Authentifizierungsrouten hinzufügen
+// Beispiel:
+/*
+const authController = require('./authController');
 
+// Login-Routen
+router.post('/auth/login/betreuer', asyncHandler(authController.loginBetreuer));
+router.post('/auth/login/admin', asyncHandler(authController.loginAdmin));
 
+// Registrierungsrouten (nur Admin)
+router.post('/auth/register/betreuer', 
+  authController.authenticateToken, 
+  authController.requireAdmin, 
+  asyncHandler(authController.registerBetreuer)
+);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+router.post('/auth/register/admin', 
+  authController.authenticateToken, 
+  authController.requireAdmin, 
+  asyncHandler(authController.registerAdmin)
+);
+*/
 
 module.exports = router;

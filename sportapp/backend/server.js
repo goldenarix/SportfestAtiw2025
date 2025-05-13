@@ -1,5 +1,4 @@
-
-// server.js - Main application file
+// server.js - Hauptanwendungsdatei
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -9,81 +8,87 @@ const apiRoutes = require('./routes');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Enhanced CORS setup
+// Erweiterte CORS-Einrichtung
 app.use(cors({
-  origin: '*', // Allow all origins during development
+  origin: '*', // Alle Ursprünge während der Entwicklung erlauben
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   credentials: true
 }));
 
-// For debugging, log all requests
+// Für Debugging, alle Anfragen protokollieren
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.originalUrl}`);
   next();
 });
 
-// Parse JSON bodies
+// JSON-Anfragen parsen
 app.use(express.json());
 
-// Health check endpoint
+// Gesundheitscheck-Endpunkt
 app.get('/', (req, res) => {
-  res.json({ message: 'Backend server is running', version: '1.0' });
+  res.json({ message: 'Backend-Server läuft', version: '1.0' });
 });
 
-// Use the API routes
+// API-Routen verwenden
 app.use('/api', apiRoutes);
 
-// Error handling middleware
+// Fehlerbehandlung-Middleware
 app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
+  console.error('Unbehandelter Fehler:', err);
   res.status(500).json({
     success: false,
-    error: 'Server error',
+    error: 'Serverfehler',
     message: err.message
   });
 });
 
-// Start the server and initialize the database
+// Server starten und Datenbank initialisieren
 async function startServer() {
   try {
-    // Initialize Oracle connection pool
+    // Oracle-Verbindungspool initialisieren
     await initialize();
     
-    // Start listening for requests
+    // Auf Anfragen warten
     app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-      console.log(`Lokale API available at: http://localhost:${PORT}/api`);
-      console.log(`Web Service API available at: https://padersport-api.onrender.com/api`);
-      console.log(`Available endpoints:`);
-      console.log(`  GET    /api/betreuer           - Get all betreuer`);
-      console.log(`  GET    /api/betreuer/:id       - Get betreuer by ID`);
-      console.log(`  POST   /api/betreuer           - Create new betreuer`);
-      console.log(`  PUT    /api/betreuer/:id       - Update betreuer`);
-      console.log(`  DELETE /api/betreuer/:id       - Delete betreuer`);
-      console.log(`  GET    /api/teams              - Get all teams`);
-      console.log(`  GET    /api/teams/:id          - Get team by ID`);
-      console.log(`  POST   /api/teams              - Create new team`);
-      console.log(`  PUT    /api/teams/:id          - Update team`);
-      console.log(`  DELETE /api/teams/:id          - Delete team`);
-      console.log(`  GET    /api/disziplins         - Get all disziplins`);
-      console.log(`  GET    /api/disziplins/:id     - Get disziplin by ID`);
-      console.log(`  POST   /api/disziplins         - Create new disziplin`);
-      console.log(`  PUT    /api/disziplins/:id     - Update disziplin`);
-      console.log(`  DELETE /api/disziplins/:id     - Delete disziplin`);
-      console.log(`  GET    /api/ergebnisse         - Get all ergebnisse`);
-      console.log(`  GET    /api/ergebnisse/:id     - Get ergebnis by ID`);
-      console.log(`  GET    /api/ergebnisse/team/:teamId - Get ergebnisse by team ID`);
-      console.log(`  GET    /api/ergebnisse/disziplin/:disziplinId - Get ergebnisse by disziplin ID`);
-      console.log(`  POST   /api/ergebnisse         - Create new ergebnis`);
-      console.log(`  PUT    /api/ergebnisse/:id     - Update ergebnis`);
-      console.log(`  DELETE /api/ergebnisse/:id     - Delete ergebnis`);
+      console.log(`Server läuft auf Port ${PORT}`);
+      console.log(`Lokale API verfügbar unter: http://localhost:${PORT}/api`);
+      console.log(`Web-Service-API verfügbar unter: https://padersport-api.onrender.com/api`);
+      console.log(`Verfügbare Endpunkte:`);
+      console.log(`  GET    /api/betreuer           - Alle Betreuer abrufen`);
+      console.log(`  GET    /api/betreuer/:id       - Betreuer nach ID abrufen`);
+      console.log(`  POST   /api/betreuer           - Neuen Betreuer erstellen`);
+      console.log(`  PUT    /api/betreuer/:id       - Betreuer aktualisieren`);
+      console.log(`  DELETE /api/betreuer/:id       - Betreuer löschen`);
+      console.log(`  GET    /api/teams              - Alle Teams abrufen`);
+      console.log(`  GET    /api/teams/:id          - Team nach ID abrufen`);
+      console.log(`  POST   /api/teams              - Neues Team erstellen`);
+      console.log(`  PUT    /api/teams/:id          - Team aktualisieren`);
+      console.log(`  DELETE /api/teams/:id          - Team löschen`);
+      console.log(`  GET    /api/disziplins         - Alle Disziplinen abrufen`);
+      console.log(`  GET    /api/disziplins/:id     - Disziplin nach ID abrufen`);
+      console.log(`  POST   /api/disziplins         - Neue Disziplin erstellen`);
+      console.log(`  PUT    /api/disziplins/:id     - Disziplin aktualisieren`);
+      console.log(`  DELETE /api/disziplins/:id     - Disziplin löschen`);
+      console.log(`  GET    /api/ergebnisse         - Alle Ergebnisse abrufen`);
+      console.log(`  GET    /api/ergebnisse/:id     - Ergebnis nach ID abrufen`);
+      console.log(`  GET    /api/ergebnisse/team/:teamId - Ergebnisse nach Team-ID abrufen`);
+      console.log(`  GET    /api/ergebnisse/disziplin/:disziplinId - Ergebnisse nach Disziplin-ID abrufen`);
+      console.log(`  POST   /api/ergebnisse         - Neues Ergebnis erstellen`);
+      console.log(`  PUT    /api/ergebnisse/:id     - Ergebnis aktualisieren`);
+      console.log(`  DELETE /api/ergebnisse/:id     - Ergebnis löschen`);
+      console.log(`  GET    /api/schueler           - Alle Schüler abrufen`);
+      console.log(`  GET    /api/schueler/:id       - Schüler nach ID abrufen`);
+      console.log(`  POST   /api/schueler           - Neuen Schüler erstellen`);
+      console.log(`  PUT    /api/schueler/:id       - Schüler aktualisieren`);
+      console.log(`  DELETE /api/schueler/:id       - Schüler löschen`);
+      console.log(`  GET    /api/all                - Alle Daten auf einmal abrufen`);
     });
   } catch (err) {
-    console.error('Failed to start server:', err);
+    console.error('Fehler beim Starten des Servers:', err);
     process.exit(1);
   }
 }
 
-// Run the server
+// Server ausführen
 startServer();
