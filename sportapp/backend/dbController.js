@@ -1223,6 +1223,6 @@ module.exports = {
   DisziplinController,
   ErgebnisController,
   getTableSchema,
-  SchuelerController,
+  schuelerController,
   StationController
 };
