@@ -74,7 +74,7 @@ const Dashboard = () => {
   const getStats = () => {
     return {
       participants: teams.length || 142,
-      activeStations: stationen.filter(s => s.AKTIV === 'Y').length || 8,
+      disciplineCount: disziplinen.length || 8,
       avgPoints: ergebnisse.length > 0 ? 
         (ergebnisse.reduce((acc, e) => acc + (parseFloat(e.PUNKTE || e.POINTSID) || 0), 0) / ergebnisse.length).toFixed(1) : 
         '72.4',
@@ -301,13 +301,13 @@ const Dashboard = () => {
                 link: '/participants'
               },
               {
-                title: 'Stationen aktiv',
-                value: stats.activeStations,
+                title: 'Anzahl Disziplinen',
+                value: stats.disciplineCount,
                 change: '+2',
                 icon: <Activity className="w-6 h-6 text-emerald-500" />,
                 trend: 'up',
                 color: 'from-emerald-500 to-teal-500',
-                link: '/stations'
+                link: '/disziplinen'
               },
               {
                 title: 'Durchschnitt Punkte',
@@ -368,41 +368,72 @@ const Dashboard = () => {
 
           {/* Main Content Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Chart Section */}
+            {/* Team Rankings Section */}
             <div className="lg:col-span-2 bg-white/80 dark:bg-slate-800/80 rounded-2xl shadow-md p-6 relative overflow-hidden border border-slate-200/50 dark:border-slate-700/50">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center">
                   <div className="w-8 h-8 flex items-center justify-center mr-3 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-                    <BarChart2 size={18} />
+                    <Medal size={18} />
                   </div>
                   <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center">
-                    Punkteverlauf pro Tag
+                    Rangliste
                   </h3>
                 </div>
+                <Link to="/leaderboard" className="text-indigo-600 dark:text-indigo-400 text-sm flex items-center hover:underline transition-all">
+                  Vollständige Rangliste <ChevronRight className="w-4 h-4 ml-1" />
+                </Link>
               </div>
               
-              {/* Chart */}
-              <div className="h-64 w-full">
-                <div className="flex items-end justify-between h-56 pr-4 mt-4 pb-1 border-b border-slate-200 dark:border-slate-700">
-                  {chartData.map((item, index) => (
-                    <div key={index} className="relative flex flex-col items-center flex-1">
+              {/* Team Rankings */}
+              <div className="space-y-4">
+                {teams.length === 0 ? (
+                  <div className="flex items-center justify-center h-56 text-slate-500 dark:text-slate-400">
+                    Keine Teams verfügbar
+                  </div>
+                ) : (
+                  teams
+                    .map(team => {
+                      // Calculate total team points
+                      const teamResults = ergebnisse.filter(e => e.TEAMID === team.TEAMID);
+                      const totalPoints = teamResults.reduce((sum, result) => 
+                        sum + parseFloat(result.PUNKTE || result.POINTSID || 0), 0);
+                      
+                      return {
+                        ...team,
+                        totalPoints,
+                        resultCount: teamResults.length
+                      };
+                    })
+                    .sort((a, b) => b.totalPoints - a.totalPoints)
+                    .slice(0, 5) // Display top 5 teams
+                    .map((team, index) => (
                       <div 
-                        className="relative w-full max-w-[30px] rounded-t-lg overflow-hidden group"
-                        style={{ height: `${(item.value / maxValue) * 100}%`, minHeight: '10%' }}
+                        key={team.TEAMID} 
+                        className="flex items-center p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors"
                       >
-                        <div className="absolute inset-0 bg-gradient-to-t from-indigo-500 to-violet-500"></div>
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-yellow-400 to-amber-600 flex items-center justify-center text-white font-bold text-sm mr-4">
+                          {index + 1}
+                        </div>
                         
-                        {/* Hover tooltip */}
-                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs py-1 px-2 rounded whitespace-nowrap z-10">
-                            {item.value} Punkte
+                        <div className="flex-1 flex flex-col md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <h4 className="font-medium text-slate-900 dark:text-white text-lg">
+                              {team.NAME || `Team ${team.TEAMID}`}
+                            </h4>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                              {team.resultCount} Disziplinen abgeschlossen
+                            </p>
+                          </div>
+                          
+                          <div className="mt-2 md:mt-0 flex items-center">
+                            <div className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold text-xl px-4 py-1 rounded-lg">
+                              {team.totalPoints} <span className="text-xs">Punkte</span>
+                            </div>
                           </div>
                         </div>
                       </div>
-                      <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">{item.day}</div>
-                    </div>
-                  ))}
-                </div>
+                    ))
+                )}
               </div>
             </div>
 
@@ -446,42 +477,52 @@ const Dashboard = () => {
                 </div>
               </div>
               
-              {/* Station completion status */}
+              {/* Discipline completion status */}
               <div className="bg-white/80 dark:bg-slate-800/80 rounded-2xl shadow-md p-6 relative overflow-hidden border border-slate-200/50 dark:border-slate-700/50">
                 <div className="flex items-center mb-6">
                   <div className="w-8 h-8 flex items-center justify-center mr-3 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
                     <Activity size={18} />
                   </div>
                   <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                    Station-Fortschritt
+                    Disziplinen-Fortschritt
                   </h3>
                 </div>
                 
                 <div className="space-y-5">
-                  {teamStationStatus.map((team, index) => (
-                    <div key={index} className="pb-4 border-b border-slate-100 dark:border-slate-700 last:border-0 last:pb-0 space-y-2">
-                      <div className="flex justify-between items-center">
-                        <h4 className="font-medium text-slate-900 dark:text-white">{team.teamName}</h4>
-                        <span className="text-sm text-slate-500 dark:text-slate-400">
-                          {team.completedCount}/{team.totalCount} Stationen
-                        </span>
-                      </div>
-                      
-                      <div className="flex space-x-2">
-                        {team.stations.map((station, stIndex) => (
-                          <div 
-                            key={stIndex}
-                            className={`flex-1 h-2 rounded-full ${
-                              station.completed 
-                                ? 'bg-emerald-500' 
-                                : 'bg-slate-200 dark:bg-slate-700'
-                            }`}
-                            title={station.stationName}
-                          ></div>
-                        ))}
-                      </div>
+                  {teams.length === 0 ? (
+                    <div className="flex items-center justify-center h-32 text-slate-500 dark:text-slate-400">
+                      Keine Teams verfügbar
                     </div>
-                  ))}
+                  ) : (
+                    teams.slice(0, 5).map((team) => {
+                      // Find disciplines this team has completed
+                      const teamResults = ergebnisse.filter(e => e.TEAMID === team.TEAMID);
+                      const uniqueDisciplinesCompleted = [...new Set(teamResults.map(r => r.DISZIPLINID))];
+                      const totalDisciplines = disziplinen.length || 1; // Prevent division by zero
+                      
+                      return (
+                        <div key={team.TEAMID} className="pb-4 border-b border-slate-100 dark:border-slate-700 last:border-0 last:pb-0 space-y-2">
+                          <div className="flex justify-between items-center">
+                            <h4 className="font-medium text-slate-900 dark:text-white">
+                              {team.NAME || `Team ${team.TEAMID}`}
+                            </h4>
+                            <span className="text-sm text-slate-500 dark:text-slate-400">
+                              {uniqueDisciplinesCompleted.length}/{totalDisciplines} Disziplinen
+                            </span>
+                          </div>
+                          
+                          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5">
+                            <div 
+                              className="bg-emerald-500 h-2.5 rounded-full" 
+                              style={{ 
+                                width: `${Math.round((uniqueDisciplinesCompleted.length / totalDisciplines) * 100)}%` 
+                              }}
+                            ></div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </div>

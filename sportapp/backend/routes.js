@@ -194,6 +194,103 @@ router.delete('/teams/:id', asyncHandler(async (req, res) => {
   }
 }));
 
+// Get students for a specific team
+router.get('/teams/:id/students', asyncHandler(async (req, res) => {
+  try {
+    const teamId = req.params.id;
+    
+    // Query to get students associated with this team
+    const query = `
+      SELECT s.* 
+      FROM SCHUELER s
+      JOIN TEAM_SCHUELER ts ON s.SCHUELERID = ts.SCHUELERID
+      WHERE ts.TEAMID = :teamId
+      ORDER BY s.NAME, s.VORNAME
+    `;
+    
+    const { executeQuery } = require('./dbController');
+    const result = await executeQuery(query, [teamId]);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        data: result.data || []
+      });
+    } else {
+      throw new Error(result.error || 'Failed to retrieve team students');
+    }
+  } catch (err) {
+    console.error('Error getting team students:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+}));
+
+// Update/set students for a team
+router.post('/teams/:id/students', asyncHandler(async (req, res) => {
+  try {
+    const teamId = req.params.id;
+    const { studentIds } = req.body;
+    
+    if (!studentIds || !Array.isArray(studentIds)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid request: studentIds array is required'
+      });
+    }
+    
+    const { getConnection, executeQuery } = require('./dbController');
+    
+    // Start a transaction
+    const connection = await getConnection();
+    
+    try {
+      // First delete all existing associations for this team
+      await executeQuery(
+        'DELETE FROM TEAM_SCHUELER WHERE TEAMID = :teamId',
+        [teamId]
+      );
+      
+      // Then insert new associations
+      if (studentIds.length > 0) {
+        // Insert each student-team association
+        for (const studentId of studentIds) {
+          await executeQuery(
+            'INSERT INTO TEAM_SCHUELER (TEAMID, SCHUELERID) VALUES (:teamId, :studentId)',
+            [teamId, studentId]
+          );
+        }
+      }
+      
+      res.json({
+        success: true,
+        message: `Updated team students. Added ${studentIds.length} students to team ${teamId}.`
+      });
+    } catch (err) {
+      // Rollback transaction in case of error
+      await connection.rollback();
+      throw err;
+    } finally {
+      // Release connection
+      if (connection) {
+        try {
+          await connection.close();
+        } catch (err) {
+          console.error('Error closing connection:', err);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error updating team students:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+}));
+
 // DISZIPLIN ROUTES
 // Get all disziplins
 router.get('/disziplins', asyncHandler(async (req, res) => {
@@ -344,20 +441,103 @@ router.delete('/stations/:id', authController.authenticateToken, StationControll
 
 // Add this to your routes.js file
 
+// Save student points (scores)
+router.post('/studentpoints', asyncHandler(async (req, res) => {
+  try {
+    const { scores } = req.body;
+    
+    if (!scores || !Array.isArray(scores) || scores.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Ungültige Punktedaten. Eine Liste von Schülerpunkten wird erwartet.'
+      });
+    }
+    
+    // Array to store results
+    const results = [];
+    
+    // Process each score entry
+    for (const score of scores) {
+      // Validate required fields
+      if (!score.SCHUELERID || !score.DISZIPLINID || score.PUNKTE === undefined || score.PUNKTE === null) {
+        return res.status(400).json({
+          success: false,
+          error: 'Jeder Punkteintrag muss SCHUELERID, DISZIPLINID und PUNKTE enthalten'
+        });
+      }
+      
+      // Check if an entry already exists for this student and discipline
+      const existingResult = await ErgebnisController.getByStudentAndDiscipline(
+        score.SCHUELERID, 
+        score.DISZIPLINID
+      );
+      
+      let result;
+      
+      if (existingResult.success && existingResult.data.length > 0) {
+        // Update existing record
+        const existingId = existingResult.data[0].ERGEBNISID;
+        result = await ErgebnisController.update(existingId, {
+          SCHUELERID: score.SCHUELERID,
+          DISZIPLINID: score.DISZIPLINID,
+          PUNKTE: score.PUNKTE,
+          TEAMID: score.TEAMID
+        });
+      } else {
+        // Create new record
+        result = await ErgebnisController.create({
+          SCHUELERID: score.SCHUELERID,
+          DISZIPLINID: score.DISZIPLINID,
+          PUNKTE: score.PUNKTE,
+          TEAMID: score.TEAMID
+        });
+      }
+      
+      if (result.success) {
+        results.push(result.data);
+      } else {
+        // If any score fails to save, return an error
+        return res.status(500).json({
+          success: false,
+          error: `Fehler beim Speichern der Punkte für Schüler ${score.SCHUELERID}: ${result.error}`
+        });
+      }
+    }
+    
+    res.status(201).json({
+      success: true,
+      message: `${results.length} Punkteeinträge erfolgreich gespeichert`,
+      data: results
+    });
+    
+  } catch (err) {
+    console.error('Error saving student points:', err);
+    res.status(500).json({
+      success: false,
+      error: 'Server error',
+      message: err.message
+    });
+  }
+}));
+
 // Get data from all tables at once
 router.get('/all', asyncHandler(async (req, res) => {
     try {
       // Run all queries in parallel for better performance
-      const [betreuerResult, teamsResult, disziplinsResult, ergebnisseResult] = await Promise.all([
+      const [betreuerResult, teamsResult, disziplinsResult, ergebnisseResult, studentsResult, teamStudentsResult] = await Promise.all([
         BetreuerController.getAll(),
         TeamController.getAll(),
         DisziplinController.getAll(),
-        ErgebnisController.getAll()
+        ErgebnisController.getAll(),
+        // Add queries for students and team-student relationships
+        db.query("SELECT * FROM schueler"),
+        db.query("SELECT * FROM team_schueler")
       ]);
       
       // Check if all queries were successful
       if (betreuerResult.success && teamsResult.success && 
-          disziplinsResult.success && ergebnisseResult.success) {
+          disziplinsResult.success && ergebnisseResult.success && 
+          studentsResult && teamStudentsResult) {
         
         // Return all data in a single response
         res.json({
@@ -366,7 +546,10 @@ router.get('/all', asyncHandler(async (req, res) => {
             betreuer: betreuerResult.data,
             teams: teamsResult.data,
             disziplins: disziplinsResult.data,
-            ergebnisse: ergebnisseResult.data
+            ergebnisse: ergebnisseResult.data,
+            students: studentsResult.rows || [],
+            teamStudents: teamStudentsResult.rows || [],
+            studentScores: ergebnisseResult.data.filter(result => result.SCHUELERID)
           }
         });
       } else {

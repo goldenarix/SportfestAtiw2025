@@ -115,7 +115,7 @@ const TeilnehmerPage = () => {
     try {
       setLoading(true);
   
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+      const baseUrl = import.meta.env.VITE_API_URL; //|| 'http://localhost:3001/api';
   
       const [teamsResponse, betreuerResponse] = await Promise.all([
         fetch(`${baseUrl}/teams`),
@@ -160,7 +160,7 @@ const TeilnehmerPage = () => {
   // Add team
   const handleAddTeam = async () => {
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+      const baseUrl = import.meta.env.VITE_API_URL; //|| 'http://localhost:3001/api';
   
       const response = await fetch(`${baseUrl}/teams`, {
         method: 'POST',
@@ -195,7 +195,7 @@ const TeilnehmerPage = () => {
   // Edit team
   const handleEditTeam = async () => {
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+      const baseUrl = import.meta.env.VITE_API_URL; // || 'http://localhost:3001/api';
   
       const response = await fetch(`${baseUrl}/teams/${currentTeam.TEAMID}`, {
         method: 'PUT',
@@ -228,7 +228,7 @@ const TeilnehmerPage = () => {
   
   
 
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+  const baseUrl = import.meta.env.VITE_API_URL; // || 'http://localhost:3001/api';
 
 // Delete team
 const handleDeleteTeam = async () => {

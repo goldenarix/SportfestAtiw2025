@@ -1,155 +1,301 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, X, List, Users, Trophy } from 'lucide-react';
-import { useDataContext } from '../../backend/DataLoader';
+import { X, Award, Database, RefreshCw, CheckCircle, AlertTriangle } from 'lucide-react';
 import StudentScoreEntry from './StudentScoreEntry';
 
-// Animation variants for modal
-const modalVariants = {
-  initial: { opacity: 0, scale: 0.8 },
-  animate: { opacity: 1, scale: 1, transition: { duration: 0.3 } },
-  exit: { opacity: 0, scale: 0.8, transition: { duration: 0.2 } }
-};
-
-// Animation variants for backdrop
-const backdropVariants = {
-  initial: { opacity: 0 },
-  animate: { opacity: 1, transition: { duration: 0.3 } },
-  exit: { opacity: 0, transition: { duration: 0.2 } }
-};
-
-const TeamDisciplineScoreModal = ({ isOpen, onClose, teamId, teamName }) => {
-  const { disziplins, loading, error } = useDataContext();
-  const [selectedDiscipline, setSelectedDiscipline] = useState(null);
-  const [step, setStep] = useState('select-discipline'); // 'select-discipline' or 'enter-scores'
-
-  // Reset state when modal closes
+const TeamDisciplineScoreModal = ({ team, onClose }) => {
+  const [disciplines, setDisciplines] = useState([]);
+  const [selectedDisciplineId, setSelectedDisciplineId] = useState('');
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState({
+    disciplines: true,
+    students: false,
+    saving: false
+  });
+  const [error, setError] = useState(null);
+  const [notification, setNotification] = useState(null);
+  
+  // Load disciplines from API
   useEffect(() => {
-    if (!isOpen) {
-      setSelectedDiscipline(null);
-      setStep('select-discipline');
+    const fetchDisciplines = async () => {
+      try {
+        setLoading(prev => ({ ...prev, disciplines: true }));
+        const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/disziplins`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          setDisciplines(result.data || []);
+        } else {
+          throw new Error(result.error || 'Failed to load disciplines');
+        }
+        
+      } catch (err) {
+        console.error('Error loading disciplines:', err);
+        setError(`Disziplinen konnten nicht geladen werden: ${err.message}`);
+      } finally {
+        setLoading(prev => ({ ...prev, disciplines: false }));
+      }
+    };
+    
+    fetchDisciplines();
+  }, []);
+  
+  // Load students when team and discipline are selected
+  useEffect(() => {
+    if (team?.TEAMID && selectedDisciplineId) {
+      const fetchTeamStudents = async () => {
+        try {
+          setLoading(prev => ({ ...prev, students: true }));
+          const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/teams/${team.TEAMID}/students`);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error: ${response.status}`);
+          }
+          
+          const result = await response.json();
+          
+          if (result.success) {
+            setStudents(result.data || []);
+          } else {
+            throw new Error(result.error || 'Failed to load team students');
+          }
+          
+        } catch (err) {
+          console.error('Error loading team students:', err);
+          setError(`Schüler konnten nicht geladen werden: ${err.message}`);
+        } finally {
+          setLoading(prev => ({ ...prev, students: false }));
+        }
+      };
+      
+      fetchTeamStudents();
+    } else {
+      setStudents([]);
     }
-  }, [isOpen]);
-
-  const handleDisciplineSelect = (discipline) => {
-    setSelectedDiscipline(discipline);
-    setStep('enter-scores');
+  }, [team?.TEAMID, selectedDisciplineId]);
+  
+  // Handle discipline selection
+  const handleDisciplineChange = (e) => {
+    setSelectedDisciplineId(e.target.value);
   };
-
-  const handleBackToSelection = () => {
-    setStep('select-discipline');
+  
+  // Handle score save
+  const handleSaveScores = async (scores) => {
+    if (scores.length === 0) {
+      setNotification({
+        type: 'warning',
+        message: 'Keine Punkte zum Speichern eingegeben.'
+      });
+      return;
+    }
+    
+    try {
+      setLoading(prev => ({ ...prev, saving: true }));
+      
+      // Make sure each score has the team ID
+      const scoresWithTeam = scores.map(score => ({
+        ...score,
+        TEAMID: team.TEAMID
+      }));
+      
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/studentpoints`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ scores: scoresWithTeam }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setNotification({
+          type: 'success',
+          message: `${result.message || 'Punkte erfolgreich gespeichert!'}`
+        });
+      } else {
+        throw new Error(result.error || 'Failed to save scores');
+      }
+      
+    } catch (err) {
+      console.error('Error saving scores:', err);
+      setNotification({
+        type: 'error',
+        message: `Fehler beim Speichern der Punkte: ${err.message}`
+      });
+    } finally {
+      setLoading(prev => ({ ...prev, saving: false }));
+    }
   };
-
-  // If modal is not open, don't render anything
-  if (!isOpen) return null;
-
+  
+  // Overlay animation
+  const overlayVariants = {
+    hidden: { opacity: 0 },
+    visible: { 
+      opacity: 1,
+      transition: { duration: 0.2 }
+    }
+  };
+  
+  // Modal animation
+  const modalVariants = {
+    hidden: { 
+      opacity: 0,
+      y: 50,
+      scale: 0.95
+    },
+    visible: { 
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: { 
+        type: 'spring',
+        damping: 25,
+        stiffness: 300
+      }
+    }
+  };
+  
   return (
     <AnimatePresence>
-      {/* Backdrop */}
       <motion.div
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
-        variants={backdropVariants}
-        initial="initial"
-        animate="animate"
-        exit="exit"
+        className="fixed inset-0 bg-black/50 dark:bg-black/70 z-50 flex items-center justify-center p-4"
+        variants={overlayVariants}
+        initial="hidden"
+        animate="visible"
+        exit="hidden"
         onClick={onClose}
-      />
-
-      {/* Modal */}
-      <motion.div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
-        variants={modalVariants}
-        initial="initial"
-        animate="animate"
-        exit="exit"
       >
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg w-full max-w-2xl overflow-hidden">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-[#5865F2] to-[#EB459E] p-4 text-white flex justify-between items-center">
-            <h3 className="text-lg font-semibold flex items-center">
-              <Users className="mr-2" size={18} />
-              {step === 'select-discipline' 
-                ? `Disziplin für ${teamName || `Team ${teamId}`} auswählen` 
-                : `Punkteeingabe: ${selectedDiscipline?.NAME || 'Disziplin'}`}
+        {/* Modal content */}
+        <motion.div
+          className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden"
+          variants={modalVariants}
+          initial="hidden"
+          animate="visible"
+          exit="hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Modal header */}
+          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center">
+              <Award className="mr-2" />
+              Punkte für Team: <span className="ml-2 text-indigo-600 dark:text-indigo-400">{team?.NAME || 'Team'}</span>
             </h3>
-            <button 
+            <button
               onClick={onClose}
-              className="p-1 rounded-full hover:bg-white/20 transition-colors"
+              className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
             >
-              <X size={18} />
+              <X size={20} />
             </button>
           </div>
-
-          {/* Content */}
-          <div className="p-4">
-            {loading ? (
-              <div className="py-16 flex justify-center items-center">
-                <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-500 rounded-full animate-spin"></div>
-              </div>
-            ) : error ? (
-              <div className="p-4 text-center text-red-500">
-                <p>Fehler beim Laden der Daten: {error}</p>
-              </div>
-            ) : step === 'select-discipline' ? (
-              <div>
-                <p className="text-slate-600 dark:text-slate-300 mb-4">
-                  Wählen Sie die Disziplin aus, für die Sie Punkte erfassen möchten:
-                </p>
-
-                {disziplins && disziplins.length > 0 ? (
-                  <ul className="divide-y divide-slate-100 dark:divide-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg">
-                    {disziplins.map(discipline => (
-                      <li 
-                        key={discipline.DISZIPLINID}
-                        className="p-3 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer transition-colors"
-                        onClick={() => handleDisciplineSelect(discipline)}
-                      >
-                        <div className="flex items-center">
-                          <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-800 flex items-center justify-center text-indigo-700 dark:text-indigo-300 font-semibold mr-4">
-                            <Trophy size={20} />
-                          </div>
-                          <div>
-                            <p className="font-medium text-slate-800 dark:text-white">{discipline.NAME}</p>
-                            <div className="flex items-center mt-1">
-                              <span className="text-xs text-slate-500 dark:text-slate-400">ID: {discipline.DISZIPLINID}</span>
-                              {discipline.BESCHREIBUNG && (
-                                <span className="text-xs text-slate-500 dark:text-slate-400 ml-3 line-clamp-1">
-                                  {discipline.BESCHREIBUNG}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="text-center p-8 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
-                    <p className="text-slate-600 dark:text-slate-300">Keine Disziplinen verfügbar.</p>
-                  </div>
+          
+          {/* Modal body */}
+          <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
+            {/* Notification */}
+            <AnimatePresence>
+              {notification && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className={`m-4 p-3 rounded-lg flex items-center ${
+                    notification.type === 'success' 
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' 
+                      : notification.type === 'warning'
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                        : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                  }`}
+                >
+                  {notification.type === 'success' 
+                    ? <CheckCircle className="h-5 w-5 mr-2" /> 
+                    : notification.type === 'warning' 
+                      ? <AlertTriangle className="h-5 w-5 mr-2" />
+                      : <AlertTriangle className="h-5 w-5 mr-2" />}
+                  <span>{notification.message}</span>
+                  <button 
+                    onClick={() => setNotification(null)}
+                    className="ml-auto p-1 rounded-full hover:bg-white/20"
+                  >
+                    <X size={16} />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            
+            {/* Discipline selector */}
+            <div className="p-4">
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Disziplin auswählen*
+                </label>
+                <div className="relative">
+                  {loading.disciplines ? (
+                    <div className="flex items-center justify-center py-2">
+                      <RefreshCw size={20} className="animate-spin mr-2 text-indigo-500" />
+                      <span className="text-slate-600 dark:text-slate-300">Lade Disziplinen...</span>
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedDisciplineId}
+                      onChange={handleDisciplineChange}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent"
+                      required
+                    >
+                      <option value="">Bitte wählen...</option>
+                      {disciplines.map(discipline => (
+                        <option key={discipline.DISZIPLINID} value={discipline.DISZIPLINID}>
+                          {discipline.NAME || `Disziplin ${discipline.DISZIPLINID}`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                {error && (
+                  <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+                    {error}
+                  </p>
                 )}
               </div>
-            ) : (
-              <div>
-                {/* Back button */}
-                <button 
-                  onClick={handleBackToSelection}
-                  className="mb-4 inline-flex items-center text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
-                >
-                  <ChevronDown className="h-4 w-4 mr-1 rotate-90" />
-                  Zurück zur Disziplinauswahl
-                </button>
-
-                {/* Student score entry component */}
-                <StudentScoreEntry 
-                  disziplinId={selectedDiscipline?.DISZIPLINID} 
-                  disziplinName={selectedDiscipline?.NAME}
-                  teamId={teamId}
-                />
-              </div>
-            )}
+              
+              {/* Student score entry section */}
+              {selectedDisciplineId && (
+                <div className="mt-4 bg-slate-50 dark:bg-slate-700/30 rounded-lg p-4">
+                  <h4 className="text-md font-medium text-slate-800 dark:text-white mb-2 flex items-center">
+                    <Database size={18} className="mr-2" />
+                    Punkte für Schüler vergeben
+                  </h4>
+                  
+                  <StudentScoreEntry 
+                    students={students}
+                    disciplineId={selectedDisciplineId}
+                    teamId={team?.TEAMID}
+                    onSaveScores={handleSaveScores}
+                    isLoading={loading.saving}
+                  />
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+          
+          {/* Modal footer */}
+          <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            >
+              Schließen
+            </button>
+          </div>
+        </motion.div>
       </motion.div>
     </AnimatePresence>
   );

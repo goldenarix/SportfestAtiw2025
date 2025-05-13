@@ -640,6 +640,15 @@ const ErgebnisController = {
     );
   },
   
+  // Get ergebnis by student and discipline
+  getByStudentAndDiscipline: async (studentId, disciplineId) => {
+    console.log(`Getting scores for student ${studentId} and discipline ${disciplineId}`);
+    return await executeQuery(
+      'SELECT * FROM Ergebnis WHERE SCHUELERID = :studentId AND DISZIPLINID = :disciplineId',
+      { studentId, disciplineId }
+    );
+  },
+  
   // Create new ergebnis with debugging and manual ID
   create: async (ergebnis) => {
     let connection;

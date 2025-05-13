@@ -74,6 +74,10 @@ const ErgebnissePage = () => {
   // Try to use context if available
   const contextData = useDataContext ? useDataContext() : null;
   
+  // Auth state
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTeam, setSelectedTeam] = useState('all');
@@ -82,6 +86,10 @@ const ErgebnissePage = () => {
   const [sortBy, setSortBy] = useState('punkte'); // 'punkte', 'team', 'disziplin'
   const [sortOrder, setSortOrder] = useState('desc'); // 'asc', 'desc'
   const [hoveredItem, setHoveredItem] = useState(null);
+  
+  // Student score modal state
+  const [showStudentScoreModal, setShowStudentScoreModal] = useState(false);
+  const [currentTeam, setCurrentTeam] = useState(null);
   
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -285,6 +293,17 @@ const ErgebnissePage = () => {
   const openDeleteModal = (ergebnis) => {
     setCurrentErgebnis(ergebnis);
     setShowDeleteModal(true);
+  };
+
+  const openStudentScoreModal = (ergebnis) => {
+    // Find the full team object based on the TEAMID
+    const teamObject = teams.find(team => team.TEAMID === ergebnis.TEAMID) || {
+      TEAMID: ergebnis.TEAMID,
+      NAME: ergebnis.teamName
+    };
+    
+    setCurrentTeam(teamObject);
+    setShowStudentScoreModal(true);
   };
 
   const resetForm = () => {
@@ -500,13 +519,23 @@ const ErgebnissePage = () => {
                     className="p-1.5 rounded-lg text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
                     whileHover={{ scale: 1.05 }}
                     onClick={() => openEditModal(ergebnis)}
+                    title="Team bearbeiten"
                   >
                     <Edit size={16} />
                   </motion.button>
                   <motion.button 
-                    className="p-1.5 rounded-lg text-slate-600 hover:text-red-600 dark:text-slate-300 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    className="p-1.5 rounded-lg text-slate-600 hover:text-green-600 dark:text-slate-300 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
                     whileHover={{ scale: 1.05 }}
-                    onClick={() => openDeleteModal(ergebnis)}
+                    onClick={() => openStudentScoreModal(ergebnis)}
+                    title="Schüler-Punkte hinzufügen"
+                  >
+                    <Plus size={16} />
+                  </motion.button>
+                  <motion.button 
+                    className={`p-1.5 rounded-lg text-slate-600 hover:text-red-600 dark:text-slate-300 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors ${!isAdmin ? "opacity-50 cursor-not-allowed" : ""}`}
+                    whileHover={{ scale: isAdmin ? 1.05 : 1 }}
+                    onClick={() => isAdmin && openDeleteModal(ergebnis)}
+                    title={!isAdmin ? "Nur Admins können löschen" : "Ergebnis löschen"}
                   >
                     <Trash2 size={16} />
                   </motion.button>
@@ -1394,6 +1423,14 @@ const ErgebnissePage = () => {
           </>
         )}
       </AnimatePresence>
+      
+      {/* Student Score Modal */}
+      {showStudentScoreModal && currentTeam && (
+        <TeamDisciplineScoreModal 
+          team={currentTeam}
+          onClose={() => setShowStudentScoreModal(false)} 
+        />
+      )}
       
       {/* CSS Variables for dark mode support in charts */}
       <style jsx>{`

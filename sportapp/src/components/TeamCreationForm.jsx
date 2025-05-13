@@ -1,208 +1,346 @@
 import React, { useState, useEffect } from 'react';
-import { Save, X, Check, AlertTriangle } from 'lucide-react';
-import { useDataContext } from '../../backend/DataLoader';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Save, X, AlertTriangle, CheckCircle, RefreshCw, Users, UserPlus } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import StudentListSelector from './StudentListSelector';
 
-const TeamCreationForm = ({ initialData = null, onSubmit, onCancel }) => {
-  // Form fields
+const TeamCreationForm = ({ onSuccess, onCancel, initialData = null }) => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  
   const [formData, setFormData] = useState({
-    NAME: '',
-    KLASSE: '',
-    BESCHREIBUNG: '',
+    NAME: initialData?.NAME || '',
+    BETREUERID: initialData?.BETREUERID || user?.id || null
   });
   
-  // Selected students that will be part of the team
   const [selectedStudents, setSelectedStudents] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [notification, setNotification] = useState(null);
+  const [betreuerList, setBetreuerList] = useState([]);
   
-  // Form submission state
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(false);
-
-  // If editing existing team, load its data
+  // Load betreuer list if user is admin
   useEffect(() => {
-    if (initialData) {
-      setFormData({
-        NAME: initialData.NAME || '',
-        KLASSE: initialData.KLASSE || '',
-        BESCHREIBUNG: initialData.BESCHREIBUNG || '',
-      });
+    if (isAdmin) {
+      const fetchBetreuer = async () => {
+        try {
+          const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/betreuer`);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error: ${response.status}`);
+          }
+          
+          const result = await response.json();
+          
+          if (result.success) {
+            setBetreuerList(result.data || []);
+          } else {
+            throw new Error(result.error || 'Failed to load betreuer');
+          }
+        } catch (err) {
+          console.error('Error loading betreuer:', err);
+          setNotification({
+            type: 'error',
+            message: `Fehler beim Laden der Betreuer: ${err.message}`
+          });
+        }
+      };
       
-      // If we have initial students data for the team, set them
-      if (initialData.students && initialData.students.length > 0) {
-        setSelectedStudents(initialData.students);
-      }
+      fetchBetreuer();
+    }
+  }, [isAdmin]);
+  
+  // Load existing team data if initialData is provided (for editing)
+  useEffect(() => {
+    if (initialData && initialData.TEAMID) {
+      // Fetch students for this team
+      const fetchTeamStudents = async () => {
+        try {
+          const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/teams/${initialData.TEAMID}/students`);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error: ${response.status}`);
+          }
+          
+          const result = await response.json();
+          
+          if (result.success) {
+            // Transform to the format expected by the StudentListSelector
+            const studentIds = result.data.map(student => student.SCHUELERID);
+            setSelectedStudents(studentIds);
+          } else {
+            throw new Error(result.error || 'Failed to load team students');
+          }
+        } catch (err) {
+          console.error('Error loading team students:', err);
+          setNotification({
+            type: 'error',
+            message: `Fehler beim Laden der Schüler: ${err.message}`
+          });
+        }
+      };
+      
+      fetchTeamStudents();
     }
   }, [initialData]);
-
+  
+  // Handle form field changes
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData({
+      ...formData,
+      [name]: value
+    });
   };
-
-  const handleStudentsChange = (students) => {
+  
+  // Handle student selection
+  const handleStudentsSelected = (students) => {
     setSelectedStudents(students);
   };
-
+  
+  // Form validation
+  const validateForm = () => {
+    if (!formData.NAME || formData.NAME.trim() === '') {
+      setNotification({
+        type: 'error',
+        message: 'Bitte geben Sie einen Team-Namen ein.'
+      });
+      return false;
+    }
+    
+    if (!formData.BETREUERID) {
+      setNotification({
+        type: 'error',
+        message: 'Bitte wählen Sie einen Betreuer aus.'
+      });
+      return false;
+    }
+    
+    return true;
+  };
+  
+  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(null);
-    setIsSubmitting(true);
-
+    
+    if (!validateForm()) {
+      return;
+    }
+    
+    setLoading(true);
+    
     try {
-      // First create/update the team
-      const teamResponse = await fetch(`${import.meta.env.VITE_API_URL}/teams${initialData?.TEAMID ? `/${initialData.TEAMID}` : ''}`, {
-        method: initialData ? 'PUT' : 'POST',
+      // Step 1: Create or update the team
+      const method = initialData?.TEAMID ? 'PUT' : 'POST';
+      const url = initialData?.TEAMID 
+        ? `${import.meta.env.VITE_API_URL || ''}/teams/${initialData.TEAMID}`
+        : `${import.meta.env.VITE_API_URL || ''}/teams`;
+      
+      const teamResponse = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(formData),
       });
-
+      
+      if (!teamResponse.ok) {
+        throw new Error(`HTTP error: ${teamResponse.status}`);
+      }
+      
       const teamResult = await teamResponse.json();
       
       if (!teamResult.success) {
-        throw new Error(teamResult.error || 'Fehler beim Speichern des Teams');
+        throw new Error(teamResult.error || 'Failed to save team');
       }
       
-      const teamId = teamResult.data?.TEAMID || initialData?.TEAMID;
-
-      // Then associate students with the team
-      if (selectedStudents.length > 0 && teamId) {
-        const studentIds = selectedStudents.map(student => student.SCHUELERID);
+      // Get the team ID (either from the response for new teams or from initialData for updates)
+      const teamId = teamResult.id || initialData.TEAMID;
+      
+      // Step 2: Update team students if needed
+      if (selectedStudents.length > 0) {
+        const studentIds = selectedStudents.map(student => student.id);
         
-        const studentsResponse = await fetch(`${import.meta.env.VITE_API_URL}/teams/${teamId}/students`, {
+        const studentsResponse = await fetch(`${import.meta.env.VITE_API_URL || ''}/teams/${teamId}/students`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ studentIds }),
         });
-
+        
+        if (!studentsResponse.ok) {
+          throw new Error(`HTTP error: ${studentsResponse.status}`);
+        }
+        
         const studentsResult = await studentsResponse.json();
         
         if (!studentsResult.success) {
-          throw new Error(studentsResult.error || 'Fehler beim Zuweisen der Schüler');
+          throw new Error(studentsResult.error || 'Failed to save team students');
         }
       }
-
-      setSuccess(true);
-      setTimeout(() => {
-        onSubmit && onSubmit({
-          ...teamResult.data,
-          students: selectedStudents
-        });
-      }, 1000);
+      
+      // Success!
+      setNotification({
+        type: 'success',
+        message: initialData?.TEAMID 
+          ? 'Team erfolgreich aktualisiert!'
+          : 'Team erfolgreich erstellt!'
+      });
+      
+      // Notify parent component
+      if (onSuccess) {
+        onSuccess(teamId);
+      }
     } catch (err) {
-      console.error('Fehler beim Speichern:', err);
-      setError(err.message);
+      console.error('Error saving team:', err);
+      setNotification({
+        type: 'error',
+        message: `Fehler beim Speichern: ${err.message}`
+      });
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
-
+  
+  if (!isAdmin) {
+    return (
+      <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 rounded-lg">
+        <div className="flex">
+          <AlertTriangle className="h-6 w-6 text-red-500 mr-3 flex-shrink-0" />
+          <div>
+            <h3 className="text-red-800 dark:text-red-300 font-medium">Zugriff verweigert</h3>
+            <p className="text-red-700 dark:text-red-400 mt-1">
+              Nur Administratoren können Teams erstellen oder bearbeiten.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Notifications */}
-      {error && (
-        <div className="p-3 bg-red-50 border-l-4 border-red-500 text-red-700 dark:bg-red-900/30 dark:text-red-300 flex items-start rounded-md">
-          <AlertTriangle className="h-5 w-5 mr-2 flex-shrink-0 mt-0.5" />
-          <p>{error}</p>
-        </div>
-      )}
+    <div>
+      {/* Notification */}
+      <AnimatePresence>
+        {notification && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className={`mb-4 p-4 rounded-lg flex items-center ${
+              notification.type === 'success' 
+                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' 
+                : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+            }`}
+          >
+            {notification.type === 'success' 
+              ? <CheckCircle className="h-5 w-5 mr-3" /> 
+              : <AlertTriangle className="h-5 w-5 mr-3" />}
+            <span>{notification.message}</span>
+            <button 
+              onClick={() => setNotification(null)}
+              className="ml-auto p-1 rounded-full hover:bg-white/20"
+            >
+              <X size={16} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
       
-      {success && (
-        <div className="p-3 bg-green-50 border-l-4 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-300 flex items-start rounded-md">
-          <Check className="h-5 w-5 mr-2 flex-shrink-0 mt-0.5" />
-          <p>Team erfolgreich {initialData ? 'aktualisiert' : 'erstellt'}!</p>
-        </div>
-      )}
-
-      {/* Team details */}
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Teamname*
-        </label>
-        <input
-          type="text"
-          name="NAME"
-          value={formData.NAME}
-          onChange={handleChange}
-          required
-          className="h-10 w-full rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 text-slate-800 dark:text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          placeholder="z.B. Team Adler"
-        />
-      </div>
-      
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Klasse
-        </label>
-        <input
-          type="text"
-          name="KLASSE"
-          value={formData.KLASSE}
-          onChange={handleChange}
-          className="h-10 w-full rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 text-slate-800 dark:text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          placeholder="z.B. 10a"
-        />
-      </div>
-      
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Beschreibung
-        </label>
-        <textarea
-          name="BESCHREIBUNG"
-          value={formData.BESCHREIBUNG}
-          onChange={handleChange}
-          rows="3"
-          className="w-full rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-slate-800 dark:text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          placeholder="Optionale Beschreibung des Teams"
-        ></textarea>
-      </div>
-
-      {/* Student selection */}
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Schüler auswählen
-        </label>
-        <StudentListSelector
-          onStudentSelect={handleStudentsChange}
-          selectedStudentIds={selectedStudents.map(student => student.SCHUELERID)}
-          placeholder="Klicken, um Schüler hinzuzufügen"
-        />
-      </div>
-
-      {/* Actions */}
-      <div className="flex justify-end space-x-3 pt-4">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-4 py-2 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-        >
-          <div className="flex items-center">
-            <X className="h-4 w-4 mr-1" />
-            Abbrechen
+      <form onSubmit={handleSubmit}>
+        <div className="grid gap-6">
+          {/* Team info section */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm border border-slate-100 dark:border-slate-700 p-6">
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center">
+              <Users className="mr-2" size={20} />
+              Team Informationen
+            </h2>
+            
+            <div className="grid gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Team Name*
+                </label>
+                <input
+                  type="text"
+                  name="NAME"
+                  value={formData.NAME}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent"
+                  placeholder="z.B. Team Adler"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Betreuer*
+                </label>
+                <select
+                  name="BETREUERID"
+                  value={formData.BETREUERID || ''}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent"
+                  required
+                >
+                  <option value="">Bitte wählen...</option>
+                  {betreuerList.map(betreuer => (
+                    <option key={betreuer.BETREUERID} value={betreuer.BETREUERID}>
+                      {betreuer.NAME || `Betreuer ${betreuer.BETREUERID}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
-        </button>
-        
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <div className="flex items-center">
-            {isSubmitting ? (
-              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-            ) : (
-              <Save className="h-4 w-4 mr-2" />
-            )}
-            {initialData ? 'Aktualisieren' : 'Team erstellen'}
+          
+          {/* Team members section */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm border border-slate-100 dark:border-slate-700 p-6">
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center">
+              <UserPlus className="mr-2" size={20} />
+              Team Mitglieder
+            </h2>
+            
+            <StudentListSelector 
+              onStudentsSelected={handleStudentsSelected} 
+              preSelectedStudentIds={selectedStudents.map(s => s.id || s)}
+            />
           </div>
-        </button>
-      </div>
-    </form>
+          
+          {/* Form actions */}
+          <div className="flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-4 py-2 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            >
+              Abbrechen
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className={`px-4 py-2 rounded-lg transition-colors flex items-center ${
+                loading 
+                  ? 'bg-indigo-400 dark:bg-indigo-700 cursor-not-allowed' 
+                  : 'bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-600 dark:hover:bg-indigo-700'
+              } text-white`}
+            >
+              {loading ? (
+                <>
+                  <RefreshCw size={18} className="mr-2 animate-spin" />
+                  Speichern...
+                </>
+              ) : (
+                <>
+                  <Save size={18} className="mr-2" />
+                  {initialData?.TEAMID ? 'Änderungen speichern' : 'Team erstellen'}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
   );
 };
 

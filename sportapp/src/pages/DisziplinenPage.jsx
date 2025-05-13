@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   CheckCircle, 
   XCircle, 
@@ -15,7 +16,8 @@ import {
   Trash2, 
   Edit, 
   ArrowLeft,
-  RefreshCw
+  RefreshCw,
+  Lock
 } from 'lucide-react';
 
 // Animation variants for page transition
@@ -52,6 +54,7 @@ const backdropVariants = {
 };
 
 const DisziplinenPage = () => {
+  const { isAdmin } = useAuth();
   const [disziplinen, setDisziplinen] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -311,13 +314,20 @@ const DisziplinenPage = () => {
             </p>
           </div>
           
-          <Link 
-            to="/disziplinen/new"
-            className="mt-4 sm:mt-0 flex items-center px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white rounded-lg transition-colors shadow-sm hover:shadow-md"
-          >
-            <PlusCircle size={18} className="mr-2" />
-            Neue Disziplin
-          </Link>
+          {isAdmin ? (
+            <Link 
+              to="/disziplinen/new"
+              className="mt-4 sm:mt-0 flex items-center px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white rounded-lg transition-colors shadow-sm hover:shadow-md"
+            >
+              <PlusCircle size={18} className="mr-2" />
+              Neue Disziplin
+            </Link>
+          ) : (
+            <div className="mt-4 sm:mt-0 flex items-center px-4 py-2 bg-white/10 text-white/70 rounded-lg cursor-not-allowed">
+              <Lock size={18} className="mr-2" />
+              Nur für Administratoren
+            </div>
+          )}
         </div>
         
         {/* Discord-style decorative elements */}
@@ -392,13 +402,20 @@ const DisziplinenPage = () => {
           <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto">
             Es wurden keine Disziplinen in der Datenbank gefunden. Fügen Sie neue Disziplinen hinzu, um sie hier anzuzeigen.
           </p>
-          <button 
-            onClick={openAddModal}
-            className="mt-6 inline-flex items-center px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors shadow-sm hover:shadow-md"
-          >
-            <PlusCircle size={18} className="mr-2" />
-            Erste Disziplin erstellen
-          </button>
+          {isAdmin ? (
+            <button 
+              onClick={openAddModal}
+              className="mt-6 inline-flex items-center px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors shadow-sm hover:shadow-md"
+            >
+              <PlusCircle size={18} className="mr-2" />
+              Erste Disziplin erstellen
+            </button>
+          ) : (
+            <div className="mt-6 inline-flex items-center px-4 py-2 bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded-lg cursor-not-allowed">
+              <Lock size={18} className="mr-2" />
+              Nur für Administratoren verfügbar
+            </div>
+          )}
         </div>
       )}
 
@@ -489,11 +506,16 @@ const DisziplinenPage = () => {
                         <Edit size={18} />
                       </Link>
                       <motion.button 
-                        className="p-2 rounded-lg text-slate-600 hover:text-red-600 dark:text-slate-300 dark:hover:text-red-400 bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                        whileHover={{ scale: 1.05 }}
-                        onClick={() => openDeleteModal(disziplin)}
+                        className={`p-2 rounded-lg bg-slate-100 dark:bg-slate-800 transition-colors ${
+                          isAdmin 
+                            ? "text-slate-600 hover:text-red-600 dark:text-slate-300 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20" 
+                            : "text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                        }`}
+                        whileHover={{ scale: isAdmin ? 1.05 : 1 }}
+                        onClick={() => isAdmin && openDeleteModal(disziplin)}
+                        title={isAdmin ? "Disziplin löschen" : "Nur Administratoren können Disziplinen löschen"}
                       >
-                        <Trash2 size={18} />
+                        {isAdmin ? <Trash2 size={18} /> : <Lock size={18} />}
                       </motion.button>
                     </div>
                   </div>

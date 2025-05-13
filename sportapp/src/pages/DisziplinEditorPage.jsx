@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-
 import { motion } from 'framer-motion';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   ArrowLeft, 
   Flag, 
@@ -23,6 +23,7 @@ const DisziplinEditorPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditMode = !!id;
+  const { isAdmin } = useAuth();
   
   const [formData, setFormData] = useState({
     NAME: '',
@@ -56,15 +57,15 @@ const DisziplinEditorPage = () => {
         const result = await response.json();
         
         if (result.success && result.data && result.data.length > 0) {
-          const disziplin = result.data[0];
+          const disziplins = result.data[0];
           setFormData({
-            NAME: disziplin.NAME || '',
-            KATEGORIE: disziplin.KATEGORIE || 'Allgemein',
-            MAX_PUNKTE: disziplin.MAX_PUNKTE || 100,
-            EINHEIT: disziplin.EINHEIT || 'Punkte',
-            TYP: disziplin.TYP || 'Standard',
-            AKTIV: disziplin.AKTIV || 'Y',
-            BESCHREIBUNG: disziplin.BESCHREIBUNG || ''
+            NAME: disziplins.NAME || '',
+            KATEGORIE: disziplins.KATEGORIE || 'Allgemein',
+            MAX_PUNKTE: disziplins.MAX_PUNKTE || 100,
+            EINHEIT: disziplins.EINHEIT || 'Punkte',
+            TYP: disziplins.TYP || 'Standard',
+            AKTIV: disziplins.AKTIV || 'Y',
+            BESCHREIBUNG: disziplins.BESCHREIBUNG || ''
           });
           setError(null);
         } else {
@@ -92,20 +93,55 @@ const DisziplinEditorPage = () => {
     try {
       setSaving(true);
       
-      const url = isEditMode 
-      ? `${import.meta.env.VITE_API_URL || ''}/api/disziplins/${id}` 
-      : `${import.meta.env.VITE_API_URL || ''}/api/disziplins`;
-    
+      // Verwende die korrekte API-URL aus envlocal.txt
+      const apiBaseUrl = "https://padersport-api.onrender.com";
+      console.log("API Basis-URL:", apiBaseUrl);
       
-      const method = isEditMode ? 'PUT' : 'POST';
+      // Versuche verschiedene API-Pfade
+      let url;
+      let response = null;
+      let success = false;
       
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
+      const possiblePaths = [
+        `${apiBaseUrl}/api/disziplins`,
+        `${apiBaseUrl}/disziplins`,
+        `${apiBaseUrl}/api/v1/disziplins`
+      ];
+      
+      // Versuche alle möglichen Pfade, bis einer funktioniert
+      for (const path of possiblePaths) {
+        const currentUrl = isEditMode ? `${path}/${id}` : path;
+        console.log("Versuche API-Endpunkt:", currentUrl);
+        
+        try {
+          response = await fetch(currentUrl, {
+            method: isEditMode ? 'PUT' : 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData),
+          });
+          
+          if (response.ok) {
+            url = currentUrl;
+            success = true;
+            console.log("Erfolgreicher API-Endpunkt gefunden:", url);
+            break;
+          }
+        } catch (pathErr) {
+          console.log("API-Pfad fehlgeschlagen:", pathErr.message);
+        }
+      }
+      
+      if (!success) {
+        throw new Error(`Kein funktionierender API-Endpunkt gefunden. Bitte überprüfen Sie die API-Konfiguration.`);
+      }
+      
+      // Überprüfe Content-Type
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error(`Server hat ein ungültiges Format zurückgegeben (JSON erwartet): ${response.status}`);
+      }
       
       const result = await response.json();
       
@@ -210,9 +246,25 @@ const DisziplinEditorPage = () => {
         </div>
       )}
       
+      {/* Admin Check Warning */}
+      {!isAdmin && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-4 rounded-lg mb-6">
+          <div className="flex">
+            <AlertTriangle className="h-6 w-6 text-amber-500 mr-3 flex-shrink-0" />
+            <div>
+              <h3 className="text-amber-800 dark:text-amber-300 font-medium">Eingeschränkter Zugriff</h3>
+              <p className="text-amber-700 dark:text-amber-400 mt-1">
+                Nur Administratoren können Disziplinen erstellen, bearbeiten oder löschen.
+                Sie können die Details einsehen, aber keine Änderungen vornehmen.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Form */}
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={isAdmin ? handleSubmit : (e) => e.preventDefault()}>
           <div className="p-6 space-y-6">
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -223,9 +275,10 @@ const DisziplinEditorPage = () => {
                 name="NAME"
                 value={formData.NAME}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
+                className={`w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white ${!isAdmin ? 'opacity-80 cursor-not-allowed' : ''}`}
                 placeholder="z.B. 100m Sprint oder Weitsprung"
                 required
+                disabled={!isAdmin}
               />
             </div>
             
@@ -238,8 +291,9 @@ const DisziplinEditorPage = () => {
                 value={formData.BESCHREIBUNG}
                 onChange={handleChange}
                 rows="3"
-                className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
+                className={`w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white ${!isAdmin ? 'opacity-80 cursor-not-allowed' : ''}`}
                 placeholder="Beschreibung und Regeln der Disziplin..."
+                disabled={!isAdmin}
               ></textarea>
             </div>
             
@@ -252,7 +306,8 @@ const DisziplinEditorPage = () => {
                   name="KATEGORIE"
                   value={formData.KATEGORIE}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
+                  className={`w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white ${!isAdmin ? 'opacity-80 cursor-not-allowed' : ''}`}
+                  disabled={!isAdmin}
                 >
                   <option value="Allgemein">Allgemein</option>
                   <option value="Laufen">Laufen</option>
@@ -271,7 +326,8 @@ const DisziplinEditorPage = () => {
                   name="TYP"
                   value={formData.TYP}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
+                  className={`w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white ${!isAdmin ? 'opacity-80 cursor-not-allowed' : ''}`}
+                  disabled={!isAdmin}
                 >
                   <option value="Standard">Standard</option>
                   <option value="Zeit">Zeit</option>
@@ -291,9 +347,10 @@ const DisziplinEditorPage = () => {
                   name="MAX_PUNKTE"
                   value={formData.MAX_PUNKTE}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
+                  className={`w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white ${!isAdmin ? 'opacity-80 cursor-not-allowed' : ''}`}
                   min="1"
                   max="1000"
+                  disabled={!isAdmin}
                 />
               </div>
               
@@ -306,8 +363,9 @@ const DisziplinEditorPage = () => {
                   name="EINHEIT"
                   value={formData.EINHEIT}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
+                  className={`w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white ${!isAdmin ? 'opacity-80 cursor-not-allowed' : ''}`}
                   placeholder="z.B. Sekunden, Meter, Punkte"
+                  disabled={!isAdmin}
                 />
               </div>
             </div>
@@ -324,7 +382,8 @@ const DisziplinEditorPage = () => {
                     value="Y"
                     checked={formData.AKTIV === 'Y'}
                     onChange={handleChange}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                    className={`h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-slate-300 ${!isAdmin ? 'opacity-80 cursor-not-allowed' : ''}`}
+                    disabled={!isAdmin}
                   />
                   <span className="ml-2 text-slate-700 dark:text-slate-300">Aktiv</span>
                 </label>
@@ -335,7 +394,8 @@ const DisziplinEditorPage = () => {
                     value="N"
                     checked={formData.AKTIV === 'N'}
                     onChange={handleChange}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                    className={`h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-slate-300 ${!isAdmin ? 'opacity-80 cursor-not-allowed' : ''}`}
+                    disabled={!isAdmin}
                   />
                   <span className="ml-2 text-slate-700 dark:text-slate-300">Inaktiv</span>
                 </label>
@@ -366,7 +426,7 @@ const DisziplinEditorPage = () => {
             </Link>
             
             <div className="flex space-x-3">
-              {isEditMode && (
+              {isEditMode && isAdmin && (
                 <button
                   type="button"
                   className="px-4 py-2 bg-red-100 hover:bg-red-200 dark:bg-red-900/20 dark:hover:bg-red-900/30 text-red-800 dark:text-red-300 rounded-lg transition-colors flex items-center"
@@ -382,8 +442,8 @@ const DisziplinEditorPage = () => {
               )}
               <button
                 type="submit"
-                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors flex items-center"
-                disabled={saving}
+                className={`px-6 py-2 ${isAdmin ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-400 cursor-not-allowed'} text-white rounded-lg transition-colors flex items-center`}
+                disabled={saving || !isAdmin}
               >
                 {saving ? (
                   <>
