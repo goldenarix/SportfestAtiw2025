@@ -710,62 +710,76 @@ router.get('/all', asyncHandler(async (req, res) => {
 }));
 
 // ===== AUTHENTIFIZIERUNGS-ROUTEN =====
-// ===== AUTHENTIFIZIERUNGS-ROUTEN =====
-// Importiere den Auth-Controller
-const authController = require('./authController');
 
-// Öffentliche Routen (ohne Authentifizierung)
-// Login-Routen
-router.post('/auth/login/betreuer', asyncHandler(async (req, res) => {
-  await authController.loginBetreuer(req, res);
+// ===== AUTHENTICATION ROUTES =====
+// Login routes
+router.post('/auth/login/betreuer', asyncHandler(authController.loginBetreuer));
+router.post('/auth/login/admin', asyncHandler(authController.loginAdmin));
+
+// Registration routes (admin only can create other users)
+router.post('/auth/register/betreuer', 
+  authController.authenticateToken, 
+  authController.requireAdmin, 
+  asyncHandler(authController.registerBetreuer)
+);
+router.post('/auth/register/admin', 
+  authController.authenticateToken, 
+  authController.requireAdmin, 
+  asyncHandler(authController.registerAdmin)
+);
+
+// User management routes
+router.get('/auth/me', 
+  authController.authenticateToken, 
+  authController.getCurrentUser
+);
+
+router.get('/auth/betreuer', 
+  authController.authenticateToken, 
+  authController.requireAdmin,
+  asyncHandler(authController.getAllBetreuer)
+);
+
+router.get('/auth/admins', 
+  authController.authenticateToken, 
+  authController.requireAdmin,
+  asyncHandler(authController.getAllAdmins)
+);
+
+// Password management
+router.put('/auth/betreuer/password', 
+  authController.authenticateToken, 
+  asyncHandler(authController.changeBetreuerPassword)
+);
+
+router.put('/auth/admin/password', 
+  authController.authenticateToken, 
+  asyncHandler(authController.changeAdminPassword)
+);
+
+// Delete accounts (admin only)
+router.delete('/auth/betreuer/:id', 
+  authController.authenticateToken, 
+  authController.requireAdmin,
+  asyncHandler(authController.deleteBetreuer)
+);
+
+router.delete('/auth/admin/:id', 
+  authController.authenticateToken, 
+  authController.requireAdmin,
+  asyncHandler(authController.deleteAdmin)
+);
+
+// Get table schema information
+router.get('/schema/:tableName', asyncHandler(async (req, res) => {
+  const result = await getTableSchema(req.params.tableName);
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(500).json(result);
+  }
 }));
 
-router.post('/auth/login/admin', asyncHandler(async (req, res) => {
-  await authController.loginAdmin(req, res);
-}));
-
-// Registrierungsrouten
-router.post('/auth/register/betreuer', asyncHandler(async (req, res) => {
-  await authController.registerBetreuer(req, res);
-}));
-
-router.post('/auth/register/admin', asyncHandler(async (req, res) => {
-  await authController.registerAdmin(req, res);
-}));
-
-// --- Geschützte Routen beginnen hier ---
-// Füge die Token-Authentifizierung für die folgenden Routen hinzu
-// Für geschützte Routen (benötigen JWT Token)
-router.get('/auth/current-user', authController.authenticateToken, asyncHandler(async (req, res) => {
-  await authController.getCurrentUser(req, res);
-}));
-
-// Passwort-Änderung (für eigene Accounts oder von Admins)
-router.post('/auth/change-password/betreuer', authController.authenticateToken, asyncHandler(async (req, res) => {
-  await authController.changeBetreuerPassword(req, res);
-}));
-
-router.post('/auth/change-password/admin', authController.authenticateToken, asyncHandler(async (req, res) => {
-  await authController.changeAdminPassword(req, res);
-}));
-
-// Admin-only Routen - benötigen Admin-Rolle
-// Benutzerverwaltungs-Routen (nur für Admins)
-router.get('/auth/admin/betreuer', authController.authenticateToken, authController.requireAdmin, asyncHandler(async (req, res) => {
-  await authController.getAllBetreuer(req, res);
-}));
-
-router.get('/auth/admin/admins', authController.authenticateToken, authController.requireAdmin, asyncHandler(async (req, res) => {
-  await authController.getAllAdmins(req, res);
-}));
-
-router.delete('/auth/admin/betreuer/:id', authController.authenticateToken, authController.requireAdmin, asyncHandler(async (req, res) => {
-  await authController.deleteBetreuer(req, res);
-}));
-
-router.delete('/auth/admin/admin/:id', authController.authenticateToken, authController.requireAdmin, asyncHandler(async (req, res) => {
-  await authController.deleteAdmin(req, res);
-}));
 
 
 module.exports = router;
