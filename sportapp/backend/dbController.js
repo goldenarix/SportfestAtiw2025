@@ -916,6 +916,215 @@ const ErgebnisController = {
   }
 };
 
+
+
+
+// SCHUELER table operations
+const schuelerController = {
+  // Get all students
+  getAll: async () => {
+    return await executeQuery('SELECT * FROM SCHUELER ORDER BY NACHNAME, VORNAME');
+  },
+
+  // Get student by ID
+  getById: async (id) => {
+    const result = await executeQuery(
+      'SELECT * FROM SCHUELER WHERE SCHUELERID = :id',
+      [id]
+    );
+    
+    return result;
+  },
+
+  // Get students by team ID
+  getByTeamId: async (teamId) => {
+    return await executeQuery(
+      'SELECT * FROM SCHUELER WHERE TEAMID = :teamId ORDER BY NACHNAME, VORNAME',
+      [teamId]
+    );
+  },
+
+  // Create new student
+  create: async (schueler) => {
+    let connection;
+    
+    try {
+      console.log('Creating new Schueler with data:', schueler);
+      
+      // Get connection directly for better control
+      connection = await oracledb.getConnection('appPool');
+      
+      // 1. Get next ID from max ID in table
+      const getMaxIdResult = await connection.execute(
+        'SELECT NVL(MAX(SCHUELERID), 0) + 1 as NEXT_ID FROM SCHUELER',
+        [],
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      
+      const nextId = getMaxIdResult.rows[0].NEXT_ID;
+      console.log('Next Schueler ID:', nextId);
+      
+      // 2. Insert with explicit ID
+      const insertQuery = `
+        INSERT INTO SCHUELER (SCHUELERID, VORNAME, NACHNAME, GEBURTSDATUM, GESCHLECHT, KLASSE, TEAMID) 
+        VALUES (:id, :vorname, :nachname, :geburtsdatum, :geschlecht, :klasse, :teamId)
+      `;
+      
+      const binds = {
+        id: nextId,
+        vorname: schueler.VORNAME || schueler.vorname,
+        nachname: schueler.NACHNAME || schueler.nachname,
+        geburtsdatum: schueler.GEBURTSDATUM || schueler.geburtsdatum || null,
+        geschlecht: schueler.GESCHLECHT || schueler.geschlecht || 'M',
+        klasse: schueler.KLASSE || schueler.klasse || null,
+        teamId: schueler.TEAMID || schueler.teamId || null
+      };
+      
+      const insertResult = await connection.execute(
+        insertQuery,
+        binds,
+        { autoCommit: true }
+      );
+      
+      return { 
+        success: true, 
+        id: nextId,
+        data: { ...binds, SCHUELERID: nextId }
+      };
+    } catch (err) {
+      console.error('Error creating Schueler:', err);
+      return { success: false, error: err.message };
+    } finally {
+      if (connection) {
+        try {
+          await connection.close();
+        } catch (err) {
+          console.error('Error closing connection:', err);
+        }
+      }
+    }
+  },
+
+  // Update student
+  update: async (id, schueler) => {
+    let connection;
+    
+    try {
+      console.log('Updating Schueler:', id, schueler);
+      
+      // Get connection
+      connection = await oracledb.getConnection('appPool');
+      
+      // Build dynamic SET clause based on provided fields
+      let setClauses = [];
+      let binds = { id: id };
+      
+      if (schueler.VORNAME !== undefined || schueler.vorname !== undefined) {
+        setClauses.push('VORNAME = :vorname');
+        binds.vorname = schueler.VORNAME || schueler.vorname;
+      }
+      
+      if (schueler.NACHNAME !== undefined || schueler.nachname !== undefined) {
+        setClauses.push('NACHNAME = :nachname');
+        binds.nachname = schueler.NACHNAME || schueler.nachname;
+      }
+      
+      if (schueler.GEBURTSDATUM !== undefined || schueler.geburtsdatum !== undefined) {
+        setClauses.push('GEBURTSDATUM = :geburtsdatum');
+        binds.geburtsdatum = schueler.GEBURTSDATUM || schueler.geburtsdatum;
+      }
+      
+      if (schueler.GESCHLECHT !== undefined || schueler.geschlecht !== undefined) {
+        setClauses.push('GESCHLECHT = :geschlecht');
+        binds.geschlecht = schueler.GESCHLECHT || schueler.geschlecht;
+      }
+      
+      if (schueler.KLASSE !== undefined || schueler.klasse !== undefined) {
+        setClauses.push('KLASSE = :klasse');
+        binds.klasse = schueler.KLASSE || schueler.klasse;
+      }
+      
+      if (schueler.TEAMID !== undefined || schueler.teamId !== undefined) {
+        setClauses.push('TEAMID = :teamId');
+        binds.teamId = schueler.TEAMID !== undefined ? schueler.TEAMID : schueler.teamId;
+      }
+      
+      // Return early if no fields to update
+      if (setClauses.length === 0) {
+        console.log('No fields to update');
+        return { success: false, error: 'No fields to update' };
+      }
+      
+      // Construct the final UPDATE query
+      const query = `UPDATE SCHUELER SET ${setClauses.join(', ')} WHERE SCHUELERID = :id`;
+      console.log('Update query:', query);
+      console.log('Binds:', binds);
+      
+      const updateResult = await connection.execute(
+        query,
+        binds,
+        { autoCommit: true }
+      );
+      
+      return { 
+        success: true, 
+        rowsAffected: updateResult.rowsAffected,
+        id: id
+      };
+    } catch (err) {
+      console.error('Error updating Schueler:', err);
+      return { success: false, error: err.message };
+    } finally {
+      if (connection) {
+        try {
+          await connection.close();
+        } catch (err) {
+          console.error('Error closing connection:', err);
+        }
+      }
+    }
+  },
+
+  // Delete student
+  delete: async (id) => {
+    let connection;
+    
+    try {
+      console.log('Deleting Schueler with ID:', id);
+      
+      // Get connection
+      connection = await oracledb.getConnection('appPool');
+      
+      // Delete the student
+      const deleteResult = await connection.execute(
+        'DELETE FROM SCHUELER WHERE SCHUELERID = :id',
+        [id],
+        { autoCommit: true }
+      );
+      
+      return { 
+        success: true, 
+        rowsDeleted: deleteResult.rowsAffected
+      };
+    } catch (err) {
+      console.error('Error deleting Schueler:', err);
+      return { success: false, error: err.message };
+    } finally {
+      if (connection) {
+        try {
+          await connection.close();
+        } catch (err) {
+          console.error('Error closing connection:', err);
+        }
+      }
+    }
+  }
+};
+
+
+
+
+
 // STATION table operations
 const StationController = {
   // Get all stations
