@@ -18,12 +18,18 @@ export const AuthProvider = ({ children }) => {
   // Initialize auth from stored token
   useEffect(() => {
     const verifyToken = async () => {
+      console.log("🔒 AuthContext: useEffect [token] - Starte Token Verifizierung.");
+      console.log("🔒 AuthContext: Aktueller Token:", token ? token.substring(0, 20) + "..." : "nicht vorhanden");
+
       if (!token) {
+        console.log("🔒 AuthContext: Kein Token vorhanden. Setze currentUser auf null und setLoading(false).");
+        setCurrentUser(null);
         setLoading(false);
         return;
       }
 
       try {
+        console.log("🔒 AuthContext: Sende /auth/me Anfrage...");
         const response = await fetch(`${API_URL}/auth/me`, {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -32,16 +38,26 @@ export const AuthProvider = ({ children }) => {
 
         if (response.ok) {
           const data = await response.json();
-          setCurrentUser(data.user);
+          console.log("🔒 AuthContext: /auth/me erfolgreich. User-Daten empfangen:", data.user);
+          if (data.user && data.user.id) {
+            setCurrentUser(data.user);
+            console.log("🔒 AuthContext: currentUser wurde durch /auth/me gesetzt auf:", data.user);
+          } else {
+            console.warn("🔒 AuthContext: /auth/me war ok, aber User-Daten sind unvollständig oder fehlen. data:", data);
+            logout(); // Behandle als Fehler, wenn User-Daten nicht korrekt sind
+          }
         } else {
-          // Token invalid or expired
-          logout();
+          const errorBody = await response.text(); // Versuche, den Fehler-Body zu lesen
+          console.error(`🔒 AuthContext: /auth/me Anfrage fehlgeschlagen oder Token ungültig. Status: ${response.status} ${response.statusText}.`);
+          console.error("🔒 AuthContext: Fehlerdetails vom Server (falls vorhanden):", errorBody);
+          logout(); // Token ist ungültig oder Anfrage schlug fehl -> Logout
         }
       } catch (err) {
-        console.error('Auth verification error:', err);
-        setError('Verbindungsfehler beim Überprüfen der Authentifizierung');
+        console.error('🔒 AuthContext: Kritischer Fehler bei der Token Verifizierung (z.B. Netzwerkproblem):', err);
+        setError('Verbindungsfehler beim Überprüfen der Authentifizierung.');
         logout();
       } finally {
+        console.log("🔒 AuthContext: Token Verifizierung abgeschlossen, setLoading(false).");
         setLoading(false);
       }
     };
@@ -53,15 +69,16 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password, role = 'betreuer') => {
     setLoading(true);
     setError(null);
+    console.log(`🔑 AuthContext: login() aufgerufen für ${role} - ${username}`);
 
     try {
       const endpoint = role === 'admin' ? 'admin' : 'betreuer';
       
-      // For betreuer, the username is stored in the NAME field
-      // For admin, it's stored in the USERNAME field
+      console.log(`🔐 Versuche Login als ${role}: ${username}`);
+      
       const payload = role === 'admin' 
         ? { username, password } 
-        : { username, password }; // Both use the same fields in the API
+        : { username, password };
 
       const response = await fetch(`${API_URL}/auth/login/${endpoint}`, {
         method: 'POST',
@@ -74,29 +91,47 @@ export const AuthProvider = ({ children }) => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        // Store token in localStorage
+        console.log(`✅ Login erfolgreich als ${role}:`, data.user);
+        console.log(`🔑 Token erhalten:`, data.token ? data.token.substring(0, 20) + "..." : 'Nein (ungültig)');
+        
         localStorage.setItem(TOKEN_KEY, data.token);
-        setToken(data.token);
-        setCurrentUser(data.user);
+        // WICHTIG: Setze currentUser hier SOFORT, damit die App reagieren kann,
+        // auch bevor der verifyToken useEffect komplett durch ist.
+        if (data.user && data.user.id) {
+            setCurrentUser(data.user);
+            console.log(`👤 currentUser wurde direkt via login() gesetzt auf:`, data.user);
+        } else {
+            console.error("❌ Login war erfolgreich, aber User-Daten vom Backend sind unvollständig!", data);
+            setError("Fehlerhafte Benutzerdaten vom Server nach Login.");
+            setLoading(false);
+            return false;
+        }
+        
+        setToken(data.token); // Dies triggert den oberen useEffect zur Verifizierung
+        
+        setLoading(false); // setLoading hier auch schon, da User-Daten da sind
         return true;
       } else {
+        console.log(`❌ Login fehlgeschlagen:`, data.error);
         setError(data.error || 'Anmeldung fehlgeschlagen');
+        setLoading(false);
         return false;
       }
     } catch (err) {
       console.error('Login error:', err);
       setError('Verbindungsfehler bei der Anmeldung');
-      return false;
-    } finally {
       setLoading(false);
+      return false;
     }
   };
 
   // Logout function
   const logout = () => {
+    console.log("🚪 AuthContext: logout() aufgerufen.");
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setCurrentUser(null);
+    console.log("🚪 AuthContext: User und Token entfernt.");
   };
 
   // Register a new betreuer (admin only)

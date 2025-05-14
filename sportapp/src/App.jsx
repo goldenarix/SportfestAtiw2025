@@ -1,10 +1,11 @@
-
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import ResponsiveLayout from './components/ResponsiveLayout';
 import TestPage from './pages/TestPage';
 import { AuthProvider } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeProvider';
+import { DataProvider } from '../backend/DataLoader';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Lazy-loaded components for better performance
@@ -23,6 +24,9 @@ const DisziplinDetailPage = lazy(() => import('./pages/DisziplinDetailPage'));
 const ErgebnissePage = lazy(() => import('./pages/ErgebnissePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage'));
+const SelectTeamForDisciplinePage = lazy(() => import('./pages/SelectTeamForDisciplinePage'));
+const SelectDisciplineForTeamPage = lazy(() => import('./pages/SelectDisciplineForTeamPage'));
+const ScoreEntryForSelectionPage = lazy(() => import('./pages/ScoreEntryForSelectionPage'));
 
 // Loading component
 const PageLoader = () => (
@@ -125,6 +129,21 @@ const AnimatedRoutes = () => {
               <ErgebnissePage />
             </Suspense>
           } />
+          <Route path="ergebnisse/disziplin/:disziplinId/team-auswahl" element={
+            <Suspense fallback={<PageLoader />}>
+              <SelectTeamForDisciplinePage />
+            </Suspense>
+          } />
+          <Route path="ergebnisse/team/:teamId/disziplin-auswahl" element={
+            <Suspense fallback={<PageLoader />}>
+              <SelectDisciplineForTeamPage />
+            </Suspense>
+          } />
+          <Route path="ergebnisse/team/:teamId/disziplin/:disziplinId/punkte" element={
+            <Suspense fallback={<PageLoader />}>
+              <ScoreEntryForSelectionPage />
+            </Suspense>
+          } />
           
           {/* Admin-only route */}
           <Route path="users" element={
@@ -144,9 +163,13 @@ const AnimatedRoutes = () => {
 const App = () => {
   return (
     <AuthProvider>
-      <Router>
-        <AnimatedRoutes />
-      </Router>
+      <ThemeProvider>
+        <DataProvider>
+          <Router>
+            <AnimatedRoutes />
+          </Router>
+        </DataProvider>
+      </ThemeProvider>
     </AuthProvider>
   );
 };

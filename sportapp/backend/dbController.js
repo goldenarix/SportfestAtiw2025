@@ -978,9 +978,10 @@ const ErgebnisController = {
       console.log('Creating new Ergebnis with data:', ergebnis);
       
       // Validate required fields
+      // SCHUELERID ist optional beim Erstellen eines TEAM-Ergebnisses, aber nicht für studentpoints
       if (!ergebnis.TEAMID || !ergebnis.DISZIPLINID) {
-        console.error('Missing required fields:', { TEAMID: ergebnis.TEAMID, DISZIPLINID: ergebnis.DISZIPLINID });
-        return { success: false, error: 'TEAMID and DISZIPLINID are required' };
+        console.error('Missing required fields for Ergebnis (TEAMID, DISZIPLINID):', ergebnis);
+        return { success: false, error: 'TEAMID and DISZIPLINID are required for an Ergebnis' };
       }
       
       // Get connection directly for better control
@@ -996,13 +997,11 @@ const ErgebnisController = {
       const nextId = getMaxIdResult.rows[0].NEXT_ID;
       console.log('Next Ergebnis ID:', nextId);
       
-      // Prepare points value - Note we're using pointsID instead of PUNKTE!
-      // Convert the input PUNKTE to pointsID
       const pointsID = ergebnis.PUNKTE !== undefined ? ergebnis.PUNKTE : 0;
       
-      // 2. Insert with explicit ID and correct column names
-      const insertQuery = `INSERT INTO Ergebnis (ERGEBNISID, TEAMID, DISZIPLINID, POINTSID) 
-                          VALUES (:id, :teamId, :disziplinId, :pointsId)`;
+      // 2. Insert with explicit ID and correct column names, now including SCHUELERID
+      const insertQuery = `INSERT INTO Ergebnis (ERGEBNISID, TEAMID, DISZIPLINID, POINTSID, SCHUELERID) 
+                          VALUES (:id, :teamId, :disziplinId, :pointsId, :schuelerId)`;
       
       console.log('Insert query:', insertQuery);
       
@@ -1010,7 +1009,8 @@ const ErgebnisController = {
         id: nextId,
         teamId: ergebnis.TEAMID,
         disziplinId: ergebnis.DISZIPLINID,
-        pointsId: pointsID  // Note the change from punkte to pointsId
+        pointsId: pointsID,
+        schuelerId: ergebnis.SCHUELERID || null // Setze auf null, falls nicht vorhanden
       };
       
       console.log('Binds:', binds);
@@ -1072,11 +1072,18 @@ const ErgebnisController = {
         setClauses.push('POINTSID = :pointsId');  // Note the change!
         binds.pointsId = ergebnis.PUNKTE;
       }
+
+      // Add SCHUELERID if provided in the update data
+      if (ergebnis.SCHUELERID !== undefined) {
+        setClauses.push('SCHUELERID = :schuelerId');
+        binds.schuelerId = ergebnis.SCHUELERID; // Kann auch null sein, um es zu entfernen
+      }
       
       // Return early if no fields to update
       if (setClauses.length === 0) {
-        console.log('No fields to update');
-        return { success: false, error: 'No fields to update' };
+        console.log('No fields to update for Ergebnis ID:', id);
+        // Rückgabe eines Erfolgsstatus, da keine Aktualisierung erforderlich war, aber kein Fehler aufgetreten ist
+        return { success: true, rowsAffected: 0, message: 'No fields to update' };
       }
       
       // Construct the final UPDATE query

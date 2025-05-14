@@ -8,7 +8,7 @@ export const DataProvider = ({ children }) => {
     teams: [],
     disziplins: [],
     ergebnisse: [],
-    students: [],
+    schueler: [],
     teamStudents: [],
     studentScores: [],
   });
@@ -58,7 +58,7 @@ export const DataProvider = ({ children }) => {
           teams: teamsJson.success ? teamsJson.data : [],
           disziplins: disziplinsJson.success ? disziplinsJson.data : [],
           ergebnisse: ergebnisseJson.success ? ergebnisseJson.data : [],
-          students: studentsJson.success ? studentsJson.data : [],
+          schueler: studentsJson.success ? studentsJson.data : [],
           studentScores: ergebnisseJson.success ? ergebnisseJson.data.filter(result => result.SCHUELERID) : []
         });
         

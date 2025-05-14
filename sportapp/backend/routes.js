@@ -682,7 +682,7 @@ router.get('/all', asyncHandler(async (req, res) => {
           teams: teamsResult.data || [],
           disziplins: disziplinsResult.data || [],
           ergebnisse: ergebnisseResult.data || [],
-          students: studentsResult.data || [],
+          schueler: studentsResult.data || [],
           studentScores: (ergebnisseResult.data || []).filter(result => result.SCHUELERID)
         }
       });
@@ -693,7 +693,7 @@ router.get('/all', asyncHandler(async (req, res) => {
       if (!teamsResult.success) errors.push(`Teams: ${teamsResult.error}`);
       if (!disziplinsResult.success) errors.push(`Disziplins: ${disziplinsResult.error}`);
       if (!ergebnisseResult.success) errors.push(`Ergebnisse: ${ergebnisseResult.error}`);
-      if (!studentsResult.success) errors.push(`Students: ${studentsResult.error}`);
+      if (!studentsResult.success) errors.push(`Schueler: ${studentsResult.error}`);
       
       res.status(500).json({
         success: false,

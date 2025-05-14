@@ -80,8 +80,7 @@ const ErgebnissePage = () => {
   const contextData = useDataContext ? useDataContext() : null;
   
   // Auth state
-  // KORREKTUR: currentUser aus dem Kontext holen und als 'user' verwenden.
-  const { currentUser: user, loading: authLoading } = useAuth(); 
+  const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const navigate = useNavigate();
   
@@ -138,26 +137,10 @@ const ErgebnissePage = () => {
 
   // Get current betreuer data when user is available
   useEffect(() => {
-    console.log("🔵 INIT EFFECT (user dependency) - START 🔵");
-    console.log("   User obj from useAuth:", JSON.stringify(user));
-    console.log("   IsAdmin flag:", isAdmin);
-
     if (user && user.id) {
-      console.log(`   ✅ User ist vorhanden: ${user.name} (ID: ${user.id}, Rolle: ${user.role})`);
-      if (user.role === 'admin') {
-        console.log("   👑 User ist Admin. Setze currentBetreuerData auf null und lade keine Betreuer-spezifischen Daten.");
-        setCurrentBetreuerData(null); // Admins haben keine spezifischen Betreuerdaten
-        // Für Admins sollten alle Teams/Disziplinen durch accessibleItems kommen, wenn currentBetreuerData null ist und isAdmin true
-      } else {
-        console.log(`   👤 User ist Betreuer. Rufe fetchBetreuerData für ID: ${user.id}`);
-        fetchBetreuerData(user.id);
-      }
-    } else {
-      console.log("   ⚠️ Kein User-Objekt vorhanden oder User hat keine ID. Setze currentBetreuerData auf null.");
-      setCurrentBetreuerData(null);
+      fetchBetreuerData(user.id);
     }
-    console.log("🔵 INIT EFFECT (user dependency) - END 🔵");
-  }, [user]); // Abhängigkeit von user ist korrekt hier
+  }, [user]);
 
   // Initialize form data when teams and disciplines data is available
   useEffect(() => {
@@ -181,9 +164,7 @@ const ErgebnissePage = () => {
       setLoading(true);
       
       const baseUrl = import.meta.env.VITE_API_URL || '';
-      console.log("🔄 Betreuer-Daten abrufen für ID:", betreuerID);
-      
-      // Stelle sicher, dass withAssignments=true gesetzt ist, um Teams zu laden
+      console.log("Betreuer ID beim Abrufen:", betreuerID);
       const response = await fetch(`${baseUrl}/betreuer/${betreuerID}?withAssignments=true`);
       
       if (!response.ok) {
@@ -193,36 +174,15 @@ const ErgebnissePage = () => {
       const result = await response.json();
       
       if (result.success && result.data) {
-        console.log("════════════════════════════════════════");
-        console.log("📥 BETREUER-DATEN VOM API GELADEN:");
-        console.log("ID:", result.data.BETREUERID);
-        console.log("Name:", result.data.NAME);
-        console.log("Rolle:", result.data.ROLLE);
-        
-        // Prüfe ob Teams-Daten korrekt geladen wurden
-        if (result.data.teams && Array.isArray(result.data.teams)) {
-          console.log(`Teams (${result.data.teams.length}):`, 
-            result.data.teams.map(t => `${t.NAME || "?"} (ID: ${t.TEAMID})`));
-        } else {
-          console.log("⚠️ Keine Teams oder ungültiges Format:", result.data.teams);
-          // Stelle sicher, dass teams immer ein Array ist
-          result.data.teams = [];
-        }
-        
-        console.log("════════════════════════════════════════");
-        
-        // Validiere betreuerWithTeams und stelle sicher, dass teams ein Array ist
-        const betreuerWithTeams = {
-          ...result.data,
-          teams: Array.isArray(result.data.teams) ? result.data.teams : []
-        };
-        
-        setCurrentBetreuerData(betreuerWithTeams);
+        console.log("Betreuer data loaded:", result.data);
+        console.log("Zugewiesene Teams:", result.data.teams);
+        console.log("Betreuer Rolle:", result.data.ROLLE);
+        setCurrentBetreuerData(result.data);
       } else {
         throw new Error('Failed to load betreuer data');
       }
     } catch (err) {
-      console.error('🚨 Error fetching betreuer data:', err);
+      console.error('Error fetching betreuer data:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -459,29 +419,10 @@ const ErgebnissePage = () => {
   }, [ergebnisse, teams, disziplinen]);
 
 
-// Korrigierte accessibleItems Funktion mit strikter Bedingung
+// Korrigierte accessibleItems Funktion
 const accessibleItems = useMemo(() => {
-  console.log("🧩 BERECHNE ACCESS ITEMS");
-  console.log("- authLoading:", authLoading); // NEU
-  console.log("- currentBetreuerData:", currentBetreuerData ? `${currentBetreuerData.NAME} (ID: ${currentBetreuerData.BETREUERID}, Rolle: ${currentBetreuerData.ROLLE})` : 'null');
-  console.log("- user:", user ? `${user.name} (Rolle: ${user.role})` : 'null');
-  console.log("- isAdmin:", isAdmin);
-  console.log("- Teams-Liste Länge (alle):", teams.length);
-
-  // 0. Fall: Authentifizierung (useAuth) lädt noch ODER Daten für die Seite laden noch
-  if (authLoading || loading) { // loading ist der lokale Ladezustand der ErgebnissePage Daten
-    console.log("⏳ AUTHENTIFIZIERUNG ODER SEITENDATEN LADEN NOCH... Zeige vorerst leere Listen.");
-    return {
-      disziplinen: [],
-      teams: [],
-      isDisziplinenRestricted: true,
-      isTeamsRestricted: true
-    };
-  }
-
-  // 1. Fall: Admin sieht alles (user ist jetzt geladen, authLoading ist false)
-  if (isAdmin) { // isAdmin wird von user abgeleitet, also ist user hier nicht-null
-    console.log("👑 ADMIN-BENUTZER - ZEIGE ALLE TEAMS/DISZIPLINEN");
+  if (!currentBetreuerData || isAdmin) {
+    // Admins können alles sehen
     return {
       disziplinen: disziplinen,
       teams: teams,
@@ -490,84 +431,35 @@ const accessibleItems = useMemo(() => {
     };
   }
 
-  // 2. Fall: Betreuer (user ist geladen, nicht Admin), aber Betreuer-spezifische Daten (currentBetreuerData) sind noch nicht geladen
-  if (user && user.role !== 'admin' && !currentBetreuerData) {
-    console.log("⏳ BETREUER-DATEN FÜR " + user.name + " LADEN NOCH (user-Objekt vorhanden, aber currentBetreuerData fehlt)... Zeige leere Listen.");
-    return {
-      disziplinen: [], 
-      teams: [],
-      isDisziplinenRestricted: true, 
-      isTeamsRestricted: true  
-    };
-  }
+  // Zugewiesene Disziplinen auf Basis der Rolle holen
+  const betreuerDisziplinen = 
+    currentBetreuerData.ROLLE === 'stationaer' && currentBetreuerData.disziplinen 
+      ? disziplinen.filter(d => currentBetreuerData.disziplinen.some(bd => bd.DISZIPLINID === d.DISZIPLINID))
+      : [];
 
-  // 3. Fall: Betreuer, und Betreuer-spezifische Daten sind geladen
-  if (user && user.role !== 'admin' && currentBetreuerData) {
-    console.log("👤 BETREUER-DATEN GELADEN FÜR:", currentBetreuerData.NAME);
-    console.log("   Rolle:", currentBetreuerData.ROLLE);
-    
-    let finalTeams = [];
-    let finalDisziplinen = [];
-    let isTeamsRestricted = true; // Standardmäßig eingeschränkt für Betreuer
-    let isDisziplinenRestricted = true; // Standardmäßig eingeschränkt für Betreuer
+  // Zugewiesene Teams - unabhängig von der Rolle
+  const betreuerTeams = 
+    currentBetreuerData.teams && currentBetreuerData.teams.length > 0
+      ? teams.filter(t => currentBetreuerData.teams.some(bt => bt.TEAMID === t.TEAMID))
+      : [];
 
-    if (currentBetreuerData.ROLLE === 'stationaer') {
-      finalDisziplinen = currentBetreuerData.disziplinen && Array.isArray(currentBetreuerData.disziplinen)
-        ? disziplinen.filter(d => currentBetreuerData.disziplinen.some(bd => bd.DISZIPLINID === d.DISZIPLINID))
-        : [];
-      // Stationäre Betreuer sehen alle Teams in der Dropdown-Liste, um Ergebnisse zuzuordnen,
-      // aber die Ergebnisliste selbst wird später durch ihre Disziplinen gefiltert.
-      finalTeams = teams; 
-      isTeamsRestricted = false; // Für die Dropdowns, nicht für die Ergebnisliste an sich
-      console.log(`   Stationärer Betreuer. Gefilterte Disziplinen (${finalDisziplinen.length}):`, finalDisziplinen.map(d => d.NAME));
-    } else if (currentBetreuerData.ROLLE === 'laufend') {
-      finalTeams = currentBetreuerData.teams && Array.isArray(currentBetreuerData.teams)
-        ? teams.filter(t => currentBetreuerData.teams.some(bt => bt.TEAMID === t.TEAMID))
-        : [];
-      finalDisziplinen = disziplinen; 
-      isDisziplinenRestricted = false; // Laufende Betreuer sehen alle Disziplinen
-      console.log(`   Laufender Betreuer. Gefilterte Teams (${finalTeams.length}):`, finalTeams.map(t => t.NAME));
-      if (finalTeams.length === 0) {
-          console.log("   ⚠️ Laufender Betreuer hat KEINE Teams zugewiesen bekommen!");
-      }
-    } else {
-      console.log("   Unbekannte Betreuer-Rolle oder keine spezifischen Daten. Zeige als Standard leere Listen (Sicherheitsmaßnahme).");
-      finalTeams = [];
-      finalDisziplinen = [];
-    }
+  console.log("Betreuer ID:", currentBetreuerData.BETREUERID);
+  console.log("Zugewiesene Teams für Betreuer:", betreuerTeams);
 
-    return {
-      disziplinen: finalDisziplinen,
-      teams: finalTeams,
-      isDisziplinenRestricted: isDisziplinenRestricted,
-      isTeamsRestricted: isTeamsRestricted
-    };
-  }
-
-  // 4. Fall: Kein User eingeloggt (user ist null, authLoading ist false)
-  //    oder anderer undefinierter Zustand. Hier könnte man entscheiden, was öffentlich sichtbar ist.
-  //    Für strikte Sicherheit zeigen wir erstmal nichts oder nur eine Login-Aufforderung.
-  //    Aktuell Fallback auf leere Listen, wenn kein spezifischer Nutzerkontext.
-  console.log("⚠️ KEIN USER EINGELOGGT (nach Auth-Check) oder anderer Fallback - Zeige leere Listen statt alle.");
   return {
-    disziplinen: [], // Sicherer Standard: nichts anzeigen
-    teams: [],       // Sicherer Standard: nichts anzeigen
-    isDisziplinenRestricted: true,
-    isTeamsRestricted: true
+    // Stationäre Betreuer sehen nur zugewiesene Disziplinen
+    disziplinen: currentBetreuerData.ROLLE === 'stationaer' ? betreuerDisziplinen : disziplinen,
+    
+    // Alle Betreuer sehen nur ihre zugewiesenen Teams - unabhängig von der Rolle
+    teams: betreuerTeams,
+    
+    isDisziplinenRestricted: currentBetreuerData.ROLLE === 'stationaer',
+    isTeamsRestricted: true // Immer auf true für nicht-Admin-Benutzer
   };
-}, [user, isAdmin, currentBetreuerData, disziplinen, teams, authLoading, loading]); // loading und authLoading hinzugefügt
+}, [currentBetreuerData, disziplinen, teams, isAdmin]);
 
   // Filtered and sorted ergebnisse
   const filteredErgebnisse = useMemo(() => {
-    console.log("⚙️ Aktualisiere filteredErgebnisse");
-    
-    // Bereite Team-IDs für die Filterung vor
-    let allowedTeamIds = [];
-    if (currentBetreuerData && !isAdmin && currentBetreuerData.ROLLE === 'laufend') {
-      allowedTeamIds = accessibleItems.teams.map(t => t.TEAMID);
-      console.log("🔒 Erlaube nur Teams mit IDs:", allowedTeamIds);
-    }
-    
     return enhancedErgebnisse
       .filter(ergebnis => {
         // Apply search filter
@@ -583,24 +475,15 @@ const accessibleItems = useMemo(() => {
         // Apply disziplin filter
         const matchesDisziplin = selectedDisziplin === 'all' || ergebnis.DISZIPLINID === parseInt(selectedDisziplin);
         
-        // Apply role-based filter - SEHR STRENGE FILTERUNG
+        // Apply role-based filter
         let matchesRole = true;
         if (currentBetreuerData && !isAdmin) {
           if (currentBetreuerData.ROLLE === 'stationaer') {
             // Stationäre Betreuer can only see results for their assigned disciplines
             matchesRole = currentBetreuerData.disziplinen?.some(d => d.DISZIPLINID === ergebnis.DISZIPLINID) || false;
-          } else if (currentBetreuerData.ROLLE === 'laufend') {
-            // STRENGE FILTERUNG: Nur Teams, die dem Betreuer zugewiesen sind
-            matchesRole = allowedTeamIds.includes(ergebnis.TEAMID);
-            
-            if (allowedTeamIds.length === 0) {
-              console.log("⚠️ Keine erlaubten Teams für Betreuer gefunden!");
-              matchesRole = false; // Keine Teams erlaubt
-            } else if (matchesRole) {
-              console.log(`✅ Zeige Ergebnis für Team ${ergebnis.teamName} (ID: ${ergebnis.TEAMID})`);
-            } else {
-              console.log(`❌ Verstecke Ergebnis für Team ${ergebnis.teamName} (ID: ${ergebnis.TEAMID})`);
-            }
+          } else {
+            // Alle anderen Betreuer sehen nur Ergebnisse für ihre zugewiesenen Teams
+            matchesRole = currentBetreuerData.teams?.some(t => t.TEAMID === ergebnis.TEAMID) || false;
           }
         }
         
@@ -623,7 +506,7 @@ const accessibleItems = useMemo(() => {
         }
         return 0;
       });
-  }, [enhancedErgebnisse, searchQuery, selectedTeam, selectedDisziplin, sortBy, sortOrder, currentBetreuerData, isAdmin, accessibleItems.teams]);
+  }, [enhancedErgebnisse, searchQuery, selectedTeam, selectedDisziplin, sortBy, sortOrder, currentBetreuerData, isAdmin]);
 
   // Data for charts
   const chartData = useMemo(() => {
@@ -632,7 +515,7 @@ const accessibleItems = useMemo(() => {
     const filteredDisziplinen = accessibleItems.isDisziplinenRestricted ? accessibleItems.disziplinen : disziplinen;
     
     // Group by team
-    const teamData = filteredTeams.map(team => {
+    const teamData = filtered(isAdmin ? teams : accessibleItems.teams).map(team => {
       const teamErgebnisse = enhancedErgebnisse.filter(e => e.TEAMID === team.TEAMID);
       const totalPoints = teamErgebnisse.reduce((sum, e) => sum + parseFloat(e.PUNKTE || 0), 0);
       
@@ -748,11 +631,7 @@ const accessibleItems = useMemo(() => {
               exit="exit"
               custom={index}
               whileHover="hover"
-              // Klick auf die Karte navigiert zur Teamauswahl für diese Disziplin
-              onClick={() => {
-                triggerHapticFeedback('light');
-                navigate(`/ergebnisse/disziplin/${disziplin.DISZIPLINID}/team-auswahl`);
-              }}
+              onClick={() => openDisziplinDetailPage(disziplin)}
               layout
             >
               <div className="p-5">
@@ -797,13 +676,12 @@ const accessibleItems = useMemo(() => {
                 <button 
                   className="mt-4 w-full py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-800/30 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors text-sm font-medium flex items-center justify-center"
                   onClick={(e) => {
-                    e.stopPropagation(); // Verhindert, dass der Klick auf die Karte doppelt ausgelöst wird
-                    triggerHapticFeedback('medium');
-                    navigate(`/ergebnisse/disziplin/${disziplin.DISZIPLINID}/team-auswahl`);
+                    e.stopPropagation();
+                    openTeamSelectionModal(disziplin);
                   }}
                 >
                   <Plus size={16} className="mr-2" />
-                  Team für Ergebnis auswählen
+                  Team auswählen
                 </button>
               </div>
               
@@ -821,9 +699,7 @@ const accessibleItems = useMemo(() => {
   // Render function for laufend betreuer (team cards)
   const renderLaufendView = () => {
     // Hier explizit loggen, welche Teams angezeigt werden
-    console.log("🔍🔍🔍 RENDER LAUFEND VIEW 🔍🔍🔍");
     console.log("Anzahl Teams in renderLaufendView:", accessibleItems.teams.length);
-    console.log("Teams in renderLaufendView:", accessibleItems.teams.map(t => `${t.NAME} (ID: ${t.TEAMID})`));
     
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -853,11 +729,7 @@ const accessibleItems = useMemo(() => {
                 exit="exit"
                 custom={index}
                 whileHover="hover"
-                // Klick auf die Karte navigiert zur Disziplinauswahl für dieses Team
-                onClick={() => {
-                  triggerHapticFeedback('light');
-                  navigate(`/ergebnisse/team/${team.TEAMID}/disziplin-auswahl`);
-                }}
+                onClick={() => openTeamDetailPage(team)}
                 layout
               >
                 <div className="p-5">
@@ -902,13 +774,12 @@ const accessibleItems = useMemo(() => {
                   <button 
                     className="mt-4 w-full py-2 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-800/30 text-green-600 dark:text-green-400 rounded-lg transition-colors text-sm font-medium flex items-center justify-center"
                     onClick={(e) => {
-                      e.stopPropagation(); // Verhindert, dass der Klick auf die Karte doppelt ausgelöst wird
-                      triggerHapticFeedback('medium');
-                      navigate(`/ergebnisse/team/${team.TEAMID}/disziplin-auswahl`);
+                      e.stopPropagation();
+                      openDisziplinSelectionModal(team);
                     }}
                   >
                     <Plus size={16} className="mr-2" />
-                    Disziplin für Ergebnis auswählen
+                    Disziplin auswählen
                   </button>
                 </div>
                 
@@ -1070,23 +941,6 @@ const accessibleItems = useMemo(() => {
                 </div>
                 
                 <div className="flex items-center gap-3">
-                  {/* Team-Selektor für Betreuer mit mehr als einem Team */}
-                  {currentBetreuerData?.ROLLE === 'laufend' && accessibleItems.teams.length > 1 && (
-                    <div className="relative">
-                      <select
-                        className="pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 appearance-none"
-                        value={selectedTeam}
-                        onChange={(e) => setSelectedTeam(e.target.value)}
-                      >
-                        <option value="all">Alle meine Teams</option>
-                        {accessibleItems.teams.map(team => (
-                          <option key={team.TEAMID} value={team.TEAMID}>{team.NAME}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    </div>
-                  )}
-                  
                   <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
                     <button
                       className={`p-2 rounded ${viewMode === 'card' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
@@ -1540,16 +1394,10 @@ const accessibleItems = useMemo(() => {
                         disabled={currentBetreuerData?.ROLLE === 'laufend' && !isAdmin}
                       >
                         <option value="">Team auswählen</option>
-                        {/* Zeige nur vom Betreuer zugewiesene Teams oder für Admin alle Teams */}
-                        {(isAdmin ? teams : accessibleItems.teams).map(team => (
+                        {accessibleItems.(isAdmin ? teams : accessibleItems.teams).map(team => (
                           <option key={team.TEAMID} value={team.TEAMID}>{team.NAME}</option>
                         ))}
                       </select>
-                      {!isAdmin && currentBetreuerData?.ROLLE === 'laufend' && accessibleItems.teams.length === 0 && (
-                        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                          Sie haben keine Teams zugewiesen. Bitte kontaktieren Sie einen Administrator.
-                        </p>
-                      )}
                     </div>
                     <div className="mb-4">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Disziplin</label>
