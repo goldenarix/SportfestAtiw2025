@@ -2,7 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDataContext } from '../../backend/DataLoader';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import TeamDisciplineScoreModal from '../components/TeamDisciplineScoreModal';
+import { triggerHapticFeedback } from '../utils/haptics';
 import { 
   Trophy, 
   AlertTriangle, 
@@ -26,7 +28,9 @@ import {
   Calendar,
   MessageSquare,
   FileText,
-  User
+  User,
+  MapPin,
+  Map
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 
@@ -68,6 +72,7 @@ const ErgebnissePage = () => {
   const [ergebnisse, setErgebnisse] = useState([]);
   const [teams, setTeams] = useState([]);
   const [disziplinen, setDisziplinen] = useState([]);
+  const [betreuer, setBetreuer] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -77,6 +82,7 @@ const ErgebnissePage = () => {
   // Auth state
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const navigate = useNavigate();
   
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
@@ -90,11 +96,14 @@ const ErgebnissePage = () => {
   // Student score modal state
   const [showStudentScoreModal, setShowStudentScoreModal] = useState(false);
   const [currentTeam, setCurrentTeam] = useState(null);
+  const [currentDisziplin, setCurrentDisziplin] = useState(null);
   
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showTeamSelectionModal, setShowTeamSelectionModal] = useState(false);
+  const [showDisziplinSelectionModal, setShowDisziplinSelectionModal] = useState(false);
   const [currentErgebnis, setCurrentErgebnis] = useState(null);
   
   // Form state
@@ -109,6 +118,9 @@ const ErgebnissePage = () => {
   // Notification state
   const [notification, setNotification] = useState(null);
 
+  // Current betreuer information with role and assignments
+  const [currentBetreuerData, setCurrentBetreuerData] = useState(null);
+
   // Load data from context if available
   useEffect(() => {
     if (contextData) {
@@ -122,6 +134,13 @@ const ErgebnissePage = () => {
       fetchAllData();
     }
   }, [contextData]);
+
+  // Get current betreuer data when user is available
+  useEffect(() => {
+    if (user && user.id) {
+      fetchBetreuerData(user.id);
+    }
+  }, [user]);
 
   // Initialize form data when teams and disciplines data is available
   useEffect(() => {
@@ -140,32 +159,63 @@ const ErgebnissePage = () => {
     }
   }, [notification]);
 
+  const fetchBetreuerData = async (betreuerID) => {
+    try {
+      setLoading(true);
+      
+      const baseUrl = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${baseUrl}/betreuer/${betreuerID}?withAssignments=true`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch betreuer data: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        console.log("Betreuer data loaded:", result.data);
+        setCurrentBetreuerData(result.data);
+      } else {
+        throw new Error('Failed to load betreuer data');
+      }
+    } catch (err) {
+      console.error('Error fetching betreuer data:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fetchAllData = async () => {
     try {
       setLoading(true);
       
       // Example direct API fetch - replace with your actual API endpoints
-      const [ergebnisseRes, teamsRes, disziplinenRes] = await Promise.all([
-        fetch(`${import.meta.env.VITE_API_URL || ''}/ergebnisse`),
-        fetch(`${import.meta.env.VITE_API_URL || ''}/teams`),
-        fetch(`${import.meta.env.VITE_API_URL || ''}/disziplins`)
+      const baseUrl = import.meta.env.VITE_API_URL || '';
+      const [ergebnisseRes, teamsRes, disziplinenRes, betreuerRes] = await Promise.all([
+        fetch(`${baseUrl}/ergebnisse`),
+        fetch(`${baseUrl}/teams`),
+        fetch(`${baseUrl}/disziplins`),
+        fetch(`${baseUrl}/betreuer?withAssignments=true`)
       ]);
       
       // Check for errors
-      if (!ergebnisseRes.ok || !teamsRes.ok || !disziplinenRes.ok) {
-        throw new Error(`HTTP error: ${ergebnisseRes.status} / ${teamsRes.status} / ${disziplinenRes.status}`);
+      if (!ergebnisseRes.ok || !teamsRes.ok || !disziplinenRes.ok || !betreuerRes.ok) {
+        throw new Error(`HTTP error: ${ergebnisseRes.status} / ${teamsRes.status} / ${disziplinenRes.status} / ${betreuerRes.status}`);
       }
       
       // Parse JSON responses
       const ergebnisseData = await ergebnisseRes.json();
       const teamsData = await teamsRes.json();
       const disziplinenData = await disziplinenRes.json();
+      const betreuerData = await betreuerRes.json();
       
       // Update state if all requests were successful
-      if (ergebnisseData.success && teamsData.success && disziplinenData.success) {
+      if (ergebnisseData.success && teamsData.success && disziplinenData.success && betreuerData.success) {
         setErgebnisse(ergebnisseData.data || []);
         setTeams(teamsData.data || []);
         setDisziplinen(disziplinenData.data || []);
+        setBetreuer(betreuerData.data || []);
         setError(null);
       } else {
         throw new Error('One or more API requests failed');
@@ -180,7 +230,9 @@ const ErgebnissePage = () => {
 
   const handleAddErgebnis = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/ergebnisse`, {
+      const baseUrl = import.meta.env.VITE_API_URL || '';
+      
+      const response = await fetch(`${baseUrl}/ergebnisse`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -191,6 +243,7 @@ const ErgebnissePage = () => {
       const result = await response.json();
       
       if (result.success) {
+        triggerHapticFeedback('success');
         setNotification({
           type: 'success',
           message: 'Ergebnis erfolgreich hinzugefügt!'
@@ -199,6 +252,7 @@ const ErgebnissePage = () => {
         setShowAddModal(false);
         resetForm();
       } else {
+        triggerHapticFeedback('error');
         throw new Error(result.error || 'Failed to add result');
       }
     } catch (err) {
@@ -212,7 +266,9 @@ const ErgebnissePage = () => {
 
   const handleEditErgebnis = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/ergebnisse/${currentErgebnis.ERGEBNISID}`, {
+      const baseUrl = import.meta.env.VITE_API_URL || '';
+      
+      const response = await fetch(`${baseUrl}/ergebnisse/${currentErgebnis.ERGEBNISID}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -223,6 +279,7 @@ const ErgebnissePage = () => {
       const result = await response.json();
       
       if (result.success) {
+        triggerHapticFeedback('success');
         setNotification({
           type: 'success',
           message: 'Ergebnis erfolgreich aktualisiert!'
@@ -230,6 +287,7 @@ const ErgebnissePage = () => {
         fetchAllData();
         setShowEditModal(false);
       } else {
+        triggerHapticFeedback('error');
         throw new Error(result.error || 'Failed to update result');
       }
     } catch (err) {
@@ -243,13 +301,16 @@ const ErgebnissePage = () => {
 
   const handleDeleteErgebnis = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/ergebnisse/${currentErgebnis.ERGEBNISID}`, {
+      const baseUrl = import.meta.env.VITE_API_URL || '';
+      
+      const response = await fetch(`${baseUrl}/ergebnisse/${currentErgebnis.ERGEBNISID}`, {
         method: 'DELETE',
       });
       
       const result = await response.json();
       
       if (result.success) {
+        triggerHapticFeedback('success');
         setNotification({
           type: 'success',
           message: 'Ergebnis erfolgreich gelöscht!'
@@ -257,6 +318,7 @@ const ErgebnissePage = () => {
         fetchAllData();
         setShowDeleteModal(false);
       } else {
+        triggerHapticFeedback('error');
         throw new Error(result.error || 'Failed to delete result');
       }
     } catch (err) {
@@ -306,6 +368,26 @@ const ErgebnissePage = () => {
     setShowStudentScoreModal(true);
   };
 
+  const openDisziplinDetailPage = (disziplin) => {
+    triggerHapticFeedback('light');
+    navigate(`/disziplin/${disziplin.DISZIPLINID}`, { state: { disziplin } });
+  };
+
+  const openTeamDetailPage = (team) => {
+    triggerHapticFeedback('light');
+    navigate(`/team-detail/${team.TEAMID}`, { state: { team } });
+  };
+
+  const openDisziplinSelectionModal = (team) => {
+    setCurrentTeam(team);
+    setShowDisziplinSelectionModal(true);
+  };
+
+  const openTeamSelectionModal = (disziplin) => {
+    setCurrentDisziplin(disziplin);
+    setShowTeamSelectionModal(true);
+  };
+
   const resetForm = () => {
     setFormData({
       TEAMID: teams.length > 0 ? teams[0].TEAMID : '',
@@ -333,6 +415,37 @@ const ErgebnissePage = () => {
     });
   }, [ergebnisse, teams, disziplinen]);
 
+  // Accessible items based on betreuer role
+  const accessibleItems = useMemo(() => {
+    if (!currentBetreuerData || isAdmin) {
+      // Admins or users without role restrictions can see everything
+      return {
+        disziplinen: disziplinen,
+        teams: teams,
+        isDisziplinenRestricted: false,
+        isTeamsRestricted: false
+      };
+    }
+
+    // Get assigned disziplinen and teams based on role
+    const betreuerDisziplinen = 
+      currentBetreuerData.ROLLE === 'stationaer' && currentBetreuerData.disziplinen 
+        ? disziplinen.filter(d => currentBetreuerData.disziplinen.some(bd => bd.DISZIPLINID === d.DISZIPLINID))
+        : [];
+
+    const betreuerTeams = 
+      currentBetreuerData.ROLLE === 'laufend' && currentBetreuerData.teams
+        ? teams.filter(t => currentBetreuerData.teams.some(bt => bt.TEAMID === t.TEAMID))
+        : [];
+
+    return {
+      disziplinen: betreuerDisziplinen.length > 0 ? betreuerDisziplinen : disziplinen,
+      teams: betreuerTeams.length > 0 ? betreuerTeams : teams,
+      isDisziplinenRestricted: currentBetreuerData.ROLLE === 'stationaer',
+      isTeamsRestricted: currentBetreuerData.ROLLE === 'laufend'
+    };
+  }, [currentBetreuerData, disziplinen, teams, isAdmin]);
+
   // Filtered and sorted ergebnisse
   const filteredErgebnisse = useMemo(() => {
     return enhancedErgebnisse
@@ -350,7 +463,19 @@ const ErgebnissePage = () => {
         // Apply disziplin filter
         const matchesDisziplin = selectedDisziplin === 'all' || ergebnis.DISZIPLINID === parseInt(selectedDisziplin);
         
-        return matchesSearch && matchesTeam && matchesDisziplin;
+        // Apply role-based filter
+        let matchesRole = true;
+        if (currentBetreuerData && !isAdmin) {
+          if (currentBetreuerData.ROLLE === 'stationaer') {
+            // Stationäre Betreuer can only see results for their assigned disciplines
+            matchesRole = currentBetreuerData.disziplinen?.some(d => d.DISZIPLINID === ergebnis.DISZIPLINID) || false;
+          } else if (currentBetreuerData.ROLLE === 'laufend') {
+            // Laufende Betreuer can only see results for their assigned teams
+            matchesRole = currentBetreuerData.teams?.some(t => t.TEAMID === ergebnis.TEAMID) || false;
+          }
+        }
+        
+        return matchesSearch && matchesTeam && matchesDisziplin && matchesRole;
       })
       .sort((a, b) => {
         // Apply sorting
@@ -369,12 +494,16 @@ const ErgebnissePage = () => {
         }
         return 0;
       });
-  }, [enhancedErgebnisse, searchQuery, selectedTeam, selectedDisziplin, sortBy, sortOrder]);
+  }, [enhancedErgebnisse, searchQuery, selectedTeam, selectedDisziplin, sortBy, sortOrder, currentBetreuerData, isAdmin]);
 
   // Data for charts
   const chartData = useMemo(() => {
+    // Filter teams and disziplinen based on betreuer role
+    const filteredTeams = accessibleItems.isTeamsRestricted ? accessibleItems.teams : teams;
+    const filteredDisziplinen = accessibleItems.isDisziplinenRestricted ? accessibleItems.disziplinen : disziplinen;
+    
     // Group by team
-    const teamData = teams.map(team => {
+    const teamData = filteredTeams.map(team => {
       const teamErgebnisse = enhancedErgebnisse.filter(e => e.TEAMID === team.TEAMID);
       const totalPoints = teamErgebnisse.reduce((sum, e) => sum + parseFloat(e.PUNKTE || 0), 0);
       
@@ -386,7 +515,7 @@ const ErgebnissePage = () => {
     }).sort((a, b) => b.punkte - a.punkte);
 
     // Group by disziplin
-    const disziplinData = disziplinen.map(disziplin => {
+    const disziplinData = filteredDisziplinen.map(disziplin => {
       const disziplinErgebnisse = enhancedErgebnisse.filter(e => e.DISZIPLINID === disziplin.DISZIPLINID);
       const avgPoints = disziplinErgebnisse.length > 0
         ? disziplinErgebnisse.reduce((sum, e) => sum + parseFloat(e.PUNKTE || 0), 0) / disziplinErgebnisse.length
@@ -400,7 +529,7 @@ const ErgebnissePage = () => {
     });
     
     return { teamData, disziplinData };
-  }, [enhancedErgebnisse, teams, disziplinen]);
+  }, [enhancedErgebnisse, teams, disziplinen, accessibleItems]);
 
   // Color scale function to get colors based on points
   const getPointsColor = (points) => {
@@ -441,13 +570,33 @@ const ErgebnissePage = () => {
     setSortOrder('desc');
   };
 
-  // Render functions for different view modes
-  const renderCardView = () => (
+  // Get role display text
+  const getRoleDisplay = (betreuer) => {
+    if (!betreuer) return { role: "Nicht zugewiesen", icon: null };
+    
+    switch (betreuer.ROLLE) {
+      case 'stationaer':
+        return { 
+          role: "Stationärer Betreuer", 
+          icon: <MapPin className="ml-2 text-blue-500" size={16} />
+        };
+      case 'laufend':
+        return { 
+          role: "Laufender Betreuer", 
+          icon: <Map className="ml-2 text-green-500" size={16} />
+        };
+      default:
+        return { role: betreuer.ROLLE || "Unbekannte Rolle", icon: null };
+    }
+  };
+
+  // Render function for stationaer betreuer (discipline cards)
+  const renderStationaerView = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <AnimatePresence>
-        {filteredErgebnisse.map((ergebnis, index) => (
+        {accessibleItems.disziplinen.map((disziplin, index) => (
           <motion.div
-            key={ergebnis.ERGEBNISID}
+            key={disziplin.DISZIPLINID}
             className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-100 dark:border-slate-700"
             variants={itemVariants}
             initial="initial"
@@ -455,92 +604,58 @@ const ErgebnissePage = () => {
             exit="exit"
             custom={index}
             whileHover="hover"
-            onMouseEnter={() => setHoveredItem(ergebnis.ERGEBNISID)}
-            onMouseLeave={() => setHoveredItem(null)}
+            onClick={() => openDisziplinDetailPage(disziplin)}
             layout
           >
             <div className="p-5">
               <div className="flex items-start justify-between">
-                <div className="flex items-center">
-                  {getMedalIcon(index)}
-                  <div className="ml-2">
-                    <h3 className="font-semibold text-slate-800 dark:text-white text-lg">
-                      {ergebnis.teamName}
-                    </h3>
-                    <p className="text-slate-600 dark:text-slate-300 text-sm">
-                      {ergebnis.disziplinName}
-                    </p>
-                  </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800 dark:text-white text-lg">
+                    {disziplin.NAME}
+                  </h3>
+                  <p className="text-slate-600 dark:text-slate-300 text-sm mt-1">
+                    {disziplin.BESCHREIBUNG || "Keine Beschreibung verfügbar"}
+                  </p>
                 </div>
-                <div className={`flex items-center justify-center h-12 w-12 rounded-lg font-bold ${getPointsColor(ergebnis.punkteNumber)}`}>
-                  {ergebnis.PUNKTE}
+                <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                  <MapPin size={20} />
                 </div>
               </div>
               
-              <div className="mt-4">
-                <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2.5 mb-4">
-                  <div 
-                    className="bg-gradient-to-r from-[#5865F2] to-[#EB459E] h-2.5 rounded-full" 
-                    style={{ width: `${(ergebnis.punkteNumber / 100) * 100}%` }}
-                  ></div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">DATUM</p>
-                    <p className="text-sm font-medium text-slate-800 dark:text-white">
-                      {ergebnis.DATUM || 'Unbekannt'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">STATUS</p>
-                    <p className="text-sm font-medium text-green-500 dark:text-green-400">
-                      Bestätigt
-                    </p>
-                  </div>
-                </div>
-                
-                {ergebnis.KOMMENTAR && (
-                  <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg text-sm text-slate-600 dark:text-slate-300 border border-slate-100 dark:border-slate-700">
-                    <div className="flex items-start">
-                      <MessageSquare size={14} className="mt-0.5 mr-2 text-slate-400" />
-                      <p className="line-clamp-2">{ergebnis.KOMMENTAR}</p>
-                    </div>
-                  </div>
-                )}
+              <div className="mt-4 grid gap-2">
+                {ergebnisse
+                  .filter(e => e.DISZIPLINID === disziplin.DISZIPLINID)
+                  .slice(0, 3)
+                  .map((ergebnis, idx) => {
+                    const team = teams.find(t => t.TEAMID === ergebnis.TEAMID);
+                    return (
+                      <div key={ergebnis.ERGEBNISID} className="p-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            {idx === 0 && <Trophy className="text-yellow-400 mr-2" size={16} />}
+                            <span className="font-medium text-slate-700 dark:text-slate-300">
+                              {team?.NAME || `Team ${ergebnis.TEAMID}`}
+                            </span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${getPointsColor(ergebnis.PUNKTE)}`}>
+                            {ergebnis.PUNKTE || 0}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
               
-              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                <div className="text-xs text-slate-500 dark:text-slate-400">
-                  ID: {ergebnis.ERGEBNISID}
-                </div>
-                <div className="flex space-x-2">
-                  <motion.button 
-                    className="p-1.5 rounded-lg text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
-                    whileHover={{ scale: 1.05 }}
-                    onClick={() => openEditModal(ergebnis)}
-                    title="Team bearbeiten"
-                  >
-                    <Edit size={16} />
-                  </motion.button>
-                  <motion.button 
-                    className="p-1.5 rounded-lg text-slate-600 hover:text-green-600 dark:text-slate-300 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
-                    whileHover={{ scale: 1.05 }}
-                    onClick={() => openStudentScoreModal(ergebnis)}
-                    title="Schüler-Punkte hinzufügen"
-                  >
-                    <Plus size={16} />
-                  </motion.button>
-                  <motion.button 
-                    className={`p-1.5 rounded-lg text-slate-600 hover:text-red-600 dark:text-slate-300 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors ${!isAdmin ? "opacity-50 cursor-not-allowed" : ""}`}
-                    whileHover={{ scale: isAdmin ? 1.05 : 1 }}
-                    onClick={() => isAdmin && openDeleteModal(ergebnis)}
-                    title={!isAdmin ? "Nur Admins können löschen" : "Ergebnis löschen"}
-                  >
-                    <Trash2 size={16} />
-                  </motion.button>
-                </div>
-              </div>
+              <button 
+                className="mt-4 w-full py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-800/30 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors text-sm font-medium flex items-center justify-center"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openTeamSelectionModal(disziplin);
+                }}
+              >
+                <Plus size={16} className="mr-2" />
+                Team auswählen
+              </button>
             </div>
             
             {/* Discord-style gradient bottom border */}
@@ -553,870 +668,733 @@ const ErgebnissePage = () => {
     </div>
   );
 
-  const renderTableView = () => (
-    <div className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-md border border-slate-100 dark:border-slate-700">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-          <thead className="bg-slate-50 dark:bg-slate-700/50">
-            <tr>
-              <th 
-                scope="col" 
-                className="px-6 py-3.5 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider cursor-pointer"
-                onClick={() => toggleSort('team')}
-              >
-                <div className="flex items-center">
-                  Team
-                  <ChevronDown 
-                    size={16} 
-                    className={`ml-1 transition-transform ${sortBy === 'team' && sortOrder === 'asc' ? 'rotate-180' : ''} ${sortBy !== 'team' ? 'opacity-0' : 'opacity-100'}`} 
-                  />
-                </div>
-              </th>
-              <th 
-                scope="col" 
-                className="px-6 py-3.5 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider cursor-pointer"
-                onClick={() => toggleSort('disziplin')}
-              >
-                <div className="flex items-center">
-                  Disziplin
-                  <ChevronDown 
-                    size={16} 
-                    className={`ml-1 transition-transform ${sortBy === 'disziplin' && sortOrder === 'asc' ? 'rotate-180' : ''} ${sortBy !== 'disziplin' ? 'opacity-0' : 'opacity-100'}`} 
-                  />
-                </div>
-              </th>
-              <th 
-                scope="col" 
-                className="px-6 py-3.5 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider cursor-pointer"
-                onClick={() => toggleSort('punkte')}
-              >
-                <div className="flex items-center">
-                  Punkte
-                  <ChevronDown 
-                    size={16} 
-                    className={`ml-1 transition-transform ${sortBy === 'punkte' && sortOrder === 'asc' ? 'rotate-180' : ''} ${sortBy !== 'punkte' ? 'opacity-0' : 'opacity-100'}`} 
-                  />
-                </div>
-              </th>
-              <th scope="col" className="px-6 py-3.5 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider">
-                Datum
-              </th>
-              <th scope="col" className="px-6 py-3.5 text-left text-xs font-medium text-slate-500 dark:text-slate-300 uppercase tracking-wider">
-                Status
-              </th>
-              <th scope="col" className="relative px-6 py-3.5">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
-            <AnimatePresence>
-              {filteredErgebnisse.map((ergebnis, index) => (
-                <motion.tr 
-                  key={ergebnis.ERGEBNISID}
-                  className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
-                  variants={itemVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  custom={index}
-                  layout
-                >
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      {getMedalIcon(index)}
-                      <span className={`flex items-center ${index < 3 ? 'ml-2' : ''}`}>
-                        <span className="font-medium text-slate-800 dark:text-white">{ergebnis.teamName}</span>
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-slate-600 dark:text-slate-300">{ergebnis.disziplinName}</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPointsColor(ergebnis.punkteNumber)}`}>
-                      {ergebnis.PUNKTE}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-slate-600 dark:text-slate-300">
-                    {ergebnis.DATUM || 'Unbekannt'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
-                      Bestätigt
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end space-x-2">
-                      <motion.button 
-                        className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                        whileHover={{ scale: 1.05 }}
-                        onClick={() => openEditModal(ergebnis)}
-                      >
-                        <Edit size={16} />
-                      </motion.button>
-                      <motion.button 
-                        className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                        whileHover={{ scale: 1.05 }}
-                        onClick={() => openDeleteModal(ergebnis)}
-                      >
-                        <Trash2 size={16} />
-                      </motion.button>
-                    </div>
-                  </td>
-                </motion.tr>
-              ))}
-            </AnimatePresence>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+  // Render function for laufend betreuer (team cards)
+  const renderLaufendView = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <AnimatePresence>
+        {accessibleItems.teams.map((team, index) => (
+          <motion.div
+            
+          
 
-  const renderChartView = () => (
-    <div className="space-y-8">
-      {/* Team Performance Chart */}
-      <motion.div 
-        className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-md border border-slate-100 dark:border-slate-700 p-5"
-        variants={itemVariants}
-        initial="initial"
-        animate="animate"
-        custom={0}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-slate-800 dark:text-white">
-            Team Performance
-          </h3>
-          <div className="flex items-center space-x-2">
-            <span className="text-xs text-slate-500 dark:text-slate-400">Auto-Update</span>
-            <button className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
-              <RefreshCw size={16} />
-            </button>
-          </div>
-        </div>
-        
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={chartData.teamData}
-              margin={{ top: 20, right: 30, left: 20, bottom: 30 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#55555522" />
-              <XAxis 
-                dataKey="name" 
-                tick={{ fill: 'var(--chart-text-color, #64748b)' }} 
-                axisLine={{ stroke: '#55555522' }}
-              />
-              <YAxis 
-                tick={{ fill: 'var(--chart-text-color, #64748b)' }} 
-                axisLine={{ stroke: '#55555522' }}
-              />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'var(--tooltip-bg, #fff)', 
-                  borderColor: 'var(--tooltip-border, #e2e8f0)',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                  borderRadius: '0.5rem'
-                }} 
-                cursor={{ fill: 'var(--chart-hover, #f8fafc33)' }}
-              />
-              <Legend wrapperStyle={{ paddingTop: '10px' }} />
-              <Bar 
-                dataKey="punkte" 
-                name="Gesamtpunkte" 
-                fill="#5865F2" 
-                radius={[4, 4, 0, 0]}
-              />
-              <Bar 
-                dataKey="anzahlDisziplinen" 
-                name="Anzahl Disziplinen" 
-                fill="#EB459E" 
-                radius={[4, 4, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </motion.div>
-      
-      {/* Disziplin Performance Chart */}
-      <motion.div 
-        className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-md border border-slate-100 dark:border-slate-700 p-5"
-        variants={itemVariants}
-        initial="initial"
-        animate="animate"
-        custom={1}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-slate-800 dark:text-white">
-            Durchschnittliche Punktzahl pro Disziplin
-          </h3>
-          <div className="flex items-center space-x-2">
-            <span className="text-xs text-slate-500 dark:text-slate-400">Auto-Update</span>
-            <button className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
-              <RefreshCw size={16} />
-            </button>
-          </div>
-        </div>
-        
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={chartData.disziplinData}
-              margin={{ top: 20, right: 30, left: 20, bottom: 30 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#55555522" />
-              <XAxis 
-                dataKey="name" 
-                tick={{ fill: 'var(--chart-text-color, #64748b)' }} 
-                axisLine={{ stroke: '#55555522' }}
-              />
-              <YAxis 
-                tick={{ fill: 'var(--chart-text-color, #64748b)' }} 
-                axisLine={{ stroke: '#55555522' }}
-              />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'var(--tooltip-bg, #fff)', 
-                  borderColor: 'var(--tooltip-border, #e2e8f0)',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                  borderRadius: '0.5rem'
-                }} 
-                cursor={{ stroke: 'var(--chart-hover, #f8fafc33)' }}
-              />
-              <Legend wrapperStyle={{ paddingTop: '10px' }} />
-              <Line 
-                type="monotone" 
-                dataKey="durchschnitt" 
-                name="Durchschnittl. Punkte" 
-                stroke="#5865F2" 
-                strokeWidth={2} 
-                dot={{ r: 4, strokeWidth: 2 }}
-                activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="anzahlTeams" 
-                name="Anzahl Teams" 
-                stroke="#EB459E" 
-                strokeWidth={2} 
-                dot={{ r: 4, strokeWidth: 2 }}
-                activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </motion.div>
+
+          key={team.TEAMID}
+            className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-100 dark:border-slate-700"
+            variants={itemVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            custom={index}
+            whileHover="hover"
+            onClick={() => openTeamDetailPage(team)}
+            layout
+          >
+            <div className="p-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-semibold text-slate-800 dark:text-white text-lg">
+                    {team.NAME}
+                  </h3>
+                  <p className="text-slate-600 dark:text-slate-300 text-sm mt-1">
+                    {team.BESCHREIBUNG || "Keine Beschreibung verfügbar"}
+                  </p>
+                </div>
+                <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
+                  <Map size={20} />
+                </div>
+              </div>
+              
+              <div className="mt-4 grid gap-2">
+                {enhancedErgebnisse
+                  .filter(e => e.TEAMID === team.TEAMID)
+                  .sort((a, b) => b.punkteNumber - a.punkteNumber)
+                  .slice(0, 3)
+                  .map((ergebnis) => {
+                    const disziplin = disziplinen.find(d => d.DISZIPLINID === ergebnis.DISZIPLINID);
+                    return (
+                      <div key={ergebnis.ERGEBNISID} className="p-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <span className="font-medium text-slate-700 dark:text-slate-300">
+                              {disziplin?.NAME || `Disziplin ${ergebnis.DISZIPLINID}`}
+                            </span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${getPointsColor(ergebnis.PUNKTE)}`}>
+                            {ergebnis.PUNKTE || 0}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+              
+              <button 
+                className="mt-4 w-full py-2 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-800/30 text-green-600 dark:text-green-400 rounded-lg transition-colors text-sm font-medium flex items-center justify-center"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openDisziplinSelectionModal(team);
+                }}
+              >
+                <Plus size={16} className="mr-2" />
+                Disziplin auswählen
+              </button>
+            </div>
+            
+            {/* Discord-style gradient bottom border */}
+            <div className="h-1" style={{ 
+              background: 'linear-gradient(90deg, #57F287 0%, #3BA55C 100%)'
+            }}></div>
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </div>
   );
 
   return (
-    <motion.div
-      className="p-6 max-w-7xl mx-auto"
+    <motion.div 
+      className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto" 
       initial="initial"
       animate="animate"
       exit="exit"
       variants={pageVariants}
     >
-      {/* Header with Discord-inspired design */}
-      <div className="mb-6 bg-gradient-to-r from-[#5865F2] to-[#EB459E] rounded-xl p-6 text-white shadow-lg relative overflow-hidden">
-        {/* Discord-style background pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <defs>
-              <pattern id="grid" width="8" height="8" patternUnits="userSpaceOnUse">
-                <path d="M 8 0 L 0 0 0 8" fill="none" stroke="white" strokeWidth="0.5" opacity="0.2"/>
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#grid)" />
-          </svg>
-        </div>
-        
-        <div className="flex flex-wrap items-center justify-between relative z-10">
-          <div>
-            <h1 className="text-2xl font-bold mb-2 flex items-center">
-              <Trophy className="inline-block mr-2" size={28} />
-              Ergebnisse
-            </h1>
-            <p className="text-white/80">
-              Übersicht aller Wettbewerbsergebnisse
-            </p>
+      {/* Header with role indicator */}
+      <div className="mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2">Ergebnisse</h1>
+        {currentBetreuerData && (
+          <div className="flex items-center text-slate-600 dark:text-slate-400 text-sm">
+            <User className="w-4 h-4 mr-1" />
+            <span>Angemeldet als {currentBetreuerData.NAME}</span>
+            <div className="flex items-center ml-4">
+              {getRoleDisplay(currentBetreuerData).icon}
+              <span className="ml-1">{getRoleDisplay(currentBetreuerData).role}</span>
+            </div>
           </div>
-          
-          <div className="flex items-center space-x-2 mt-4 sm:mt-0">
-            <motion.div 
-              className="bg-white/10 backdrop-blur-sm px-3 py-1.5 rounded-lg text-sm font-medium"
-              whileHover={{ scale: 1.05 }}
-              transition={{ type: "spring", stiffness: 400, damping: 10 }}
-            >
-              {filteredErgebnisse.length} Ergebnisse
-            </motion.div>
-            
-            <motion.button 
-              className="bg-white/10 hover:bg-white/20 backdrop-blur-sm p-2 rounded-lg transition-colors"
-              whileHover={{ scale: 1.05 }}
-              transition={{ type: "spring", stiffness: 400, damping: 10 }}
-              onClick={openAddModal}
-            >
-              <Plus size={20} />
-            </motion.button>
-          </div>
-        </div>
-        
-        {/* Discord-style decorative elements */}
-        <div className="absolute bottom-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mb-16"></div>
-        <div className="absolute top-0 left-0 w-16 h-16 bg-white/5 rounded-full -ml-8 -mt-8"></div>
+        )}
+        <p className="text-gray-600 dark:text-gray-400">
+          {currentBetreuerData?.ROLLE === 'stationaer' 
+            ? 'Verwalten Sie Ergebnisse für Ihre zugewiesenen Disziplinen' 
+            : currentBetreuerData?.ROLLE === 'laufend'
+            ? 'Verfolgen Sie die Ergebnisse Ihrer Teams in allen Disziplinen'
+            : 'Übersicht aller Wettbewerbsergebnisse'}
+        </p>
       </div>
+
+      {/* Search and filter controls */}
+      <div className="mb-6 flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+        <div className="relative flex-grow">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <input
+            type="text"
+            placeholder="Nach Team oder Disziplin suchen..."
+            className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        
+        {/* View mode selector */}
+        <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+          <button
+            className={`p-2 rounded ${viewMode === 'card' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+            onClick={() => setViewMode('card')}
+            aria-label="Card view"
+          >
+            <Grid className="w-5 h-5" />
+          </button>
+          <button
+            className={`p-2 rounded ${viewMode === 'table' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+            onClick={() => setViewMode('table')}
+            aria-label="Table view"
+          >
+            <List className="w-5 h-5" />
+          </button>
+          <button
+            className={`p-2 rounded ${viewMode === 'chart' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+            onClick={() => setViewMode('chart')}
+            aria-label="Chart view"
+          >
+            <BarChart3 className="w-5 h-5" />
+          </button>
+        </div>
+        
+        {/* Team selector */}
+        {(!currentBetreuerData?.ROLLE || currentBetreuerData?.ROLLE !== 'laufend' || isAdmin) && (
+          <div className="relative">
+            <select
+              className="pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 appearance-none"
+              value={selectedTeam}
+              onChange={(e) => setSelectedTeam(e.target.value)}
+            >
+              <option value="all">Alle Teams</option>
+              {accessibleItems.teams.map(team => (
+                <option key={team.TEAMID} value={team.TEAMID}>{team.NAME}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          </div>
+        )}
+        
+        {/* Disziplin selector */}
+        {(!currentBetreuerData?.ROLLE || currentBetreuerData?.ROLLE !== 'stationaer' || isAdmin) && (
+          <div className="relative">
+            <select
+              className="pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 appearance-none"
+              value={selectedDisziplin}
+              onChange={(e) => setSelectedDisziplin(e.target.value)}
+            >
+              <option value="all">Alle Disziplinen</option>
+              {accessibleItems.disziplinen.map(disziplin => (
+                <option key={disziplin.DISZIPLINID} value={disziplin.DISZIPLINID}>{disziplin.NAME}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          </div>
+        )}
+        
+        {/* Reset filters button */}
+        <button
+          className="flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+          onClick={resetFilters}
+        >
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Filter zurücksetzen
+        </button>
+        
+        {/* Add result button */}
+        <button
+          className="flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg ml-auto"
+          onClick={() => {
+            openAddModal();
+            triggerHapticFeedback('light');
+          }}
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Ergebnis hinzufügen
+        </button>
+      </div>
+
+      {/* Loading state */}
+      {loading && (
+        <div className="flex justify-center items-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      )}
+      
+      {/* Error state */}
+      {error && (
+        <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-4">
+          <div className="flex items-center">
+            <AlertTriangle className="w-5 h-5 mr-2" />
+            <p>{error}</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Role-based views */}
+      {!loading && !error && (
+        <>
+          {currentBetreuerData?.ROLLE === 'stationaer' && !isAdmin ? (
+            renderStationaerView()
+          ) : currentBetreuerData?.ROLLE === 'laufend' && !isAdmin ? (
+            renderLaufendView()
+          ) : (
+            <>
+              {/* Admin or no specific role - show all results */}
+              {viewMode === 'card' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <AnimatePresence>
+                    {filteredErgebnisse.map((ergebnis, index) => (
+                      <motion.div
+                        key={ergebnis.ERGEBNISID}
+                        className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow hover:shadow-md transition-all duration-300 border border-gray-100 dark:border-gray-700"
+                        variants={itemVariants}
+                        initial="initial"
+                        animate="animate"
+                        exit="exit"
+                        custom={index}
+                        whileHover={{ scale: 1.01 }}
+                      >
+                        <div className="p-4">
+                          <div className="flex justify-between items-start mb-3">
+                            <div onClick={() => openTeamDetailPage({ TEAMID: ergebnis.TEAMID, NAME: ergebnis.teamName })} className="cursor-pointer">
+                              <h3 className="font-semibold text-gray-900 dark:text-white text-lg hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center">
+                                {getMedalIcon(index)}
+                                <span className={index < 3 ? 'ml-2' : ''}>{ergebnis.teamName}</span>
+                              </h3>
+                            </div>
+                            <div className={`px-3 py-1 rounded-full text-sm font-semibold ${getPointsColor(ergebnis.punkteNumber)}`}>
+                              {ergebnis.PUNKTE}
+                            </div>
+                          </div>
+                          <div onClick={() => openDisziplinDetailPage({ DISZIPLINID: ergebnis.DISZIPLINID, NAME: ergebnis.disziplinName })} className="cursor-pointer">
+                            <p className="text-sm text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                              {ergebnis.disziplinName}
+                            </p>
+                          </div>
+                          
+                          {ergebnis.DATUM && (
+                            <div className="flex items-center mt-2 text-xs text-gray-500 dark:text-gray-400">
+                              <Calendar className="w-3 h-3 mr-1" />
+                              {new Date(ergebnis.DATUM).toLocaleDateString()}
+                            </div>
+                          )}
+                          
+                          {ergebnis.KOMMENTAR && (
+                            <div className="flex items-start mt-2 text-xs text-gray-500 dark:text-gray-400">
+                              <MessageSquare className="w-3 h-3 mr-1 mt-0.5" />
+                              <span className="line-clamp-2">{ergebnis.KOMMENTAR}</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 flex justify-end space-x-2">
+                          <button
+                            className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-800/30 rounded-md"
+                            onClick={() => {
+                              openStudentScoreModal(ergebnis);
+                              triggerHapticFeedback('light');
+                            }}
+                            title="Einzelpunkte anzeigen"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </button>
+                          <button
+                            className="p-1.5 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-800/30 rounded-md"
+                            onClick={() => {
+                              openEditModal(ergebnis);
+                              triggerHapticFeedback('light');
+                            }}
+                            title="Ergebnis bearbeiten"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            className="p-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-800/30 rounded-md"
+                            onClick={() => {
+                              openDeleteModal(ergebnis);
+                              triggerHapticFeedback('light');
+                            }}
+                            title="Ergebnis löschen"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+              
+              {viewMode === 'table' && (
+                <div className="bg-white dark:bg-gray-800 shadow overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-700">
+                      <tr>
+                        <th 
+                          scope="col" 
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer"
+                          onClick={() => toggleSort('team')}
+                        >
+                          <div className="flex items-center">
+                            Team
+                            {sortBy === 'team' && (
+                              <ChevronDown className={`ml-1 w-4 h-4 transform ${sortOrder === 'asc' ? 'rotate-180' : 'rotate-0'}`} />
+                            )}
+                          </div>
+                        </th>
+                        <th 
+                          scope="col" 
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer"
+                          onClick={() => toggleSort('disziplin')}
+                        >
+                          <div className="flex items-center">
+                            Disziplin
+                            {sortBy === 'disziplin' && (
+                              <ChevronDown className={`ml-1 w-4 h-4 transform ${sortOrder === 'asc' ? 'rotate-180' : 'rotate-0'}`} />
+                            )}
+                          </div>
+                        </th>
+                        <th 
+                          scope="col" 
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer"
+                          onClick={() => toggleSort('punkte')}
+                        >
+                          <div className="flex items-center">
+                            Punkte
+                            {sortBy === 'punkte' && (
+                              <ChevronDown className={`ml-1 w-4 h-4 transform ${sortOrder === 'asc' ? 'rotate-180' : 'rotate-0'}`} />
+                            )}
+                          </div>
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Datum
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Aktionen
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                      {filteredErgebnisse.length > 0 ? (
+                        filteredErgebnisse.map((ergebnis, index) => (
+                          <tr 
+                            key={ergebnis.ERGEBNISID}
+                            className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
+                              hoveredItem === ergebnis.ERGEBNISID ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                            }`}
+                            onMouseEnter={() => setHoveredItem(ergebnis.ERGEBNISID)}
+                            onMouseLeave={() => setHoveredItem(null)}
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                {getMedalIcon(index)}
+                                <div className={`font-medium text-gray-900 dark:text-white ${index < 3 ? 'ml-2' : ''}`}>
+                                  {ergebnis.teamName}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900 dark:text-gray-200">{ergebnis.disziplinName}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getPointsColor(ergebnis.punkteNumber)}`}>
+                                {ergebnis.PUNKTE}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                              {ergebnis.DATUM ? new Date(ergebnis.DATUM).toLocaleDateString() : '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <button
+                                className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 mr-3"
+                                onClick={() => {
+                                  openStudentScoreModal(ergebnis);
+                                  triggerHapticFeedback('light');
+                                }}
+                              >
+                                <FileText className="w-4 h-4 inline" />
+                              </button>
+                              <button
+                                className="text-amber-600 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300 mr-3"
+                                onClick={() => {
+                                  openEditModal(ergebnis);
+                                  triggerHapticFeedback('light');
+                                }}
+                              >
+                                <Edit className="w-4 h-4 inline" />
+                              </button>
+                              <button
+                                className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
+                                onClick={() => {
+                                  openDeleteModal(ergebnis);
+                                  triggerHapticFeedback('light');
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4 inline" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                            Keine Ergebnisse gefunden
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              
+              {viewMode === 'chart' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Team points chart */}
+                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Teams nach Gesamtpunkten</h3>
+                    <div className="h-80">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={chartData.teamData}
+                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="punkte" name="Punkte" fill="#5865F2" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                  
+                  {/* Disziplin average points chart */}
+                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Durchschnittspunkte pro Disziplin</h3>
+                    <div className="h-80">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={chartData.disziplinData}
+                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="durchschnitt" name="Durchschnitt" fill="#EB459E" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {/* No results message */}
+      {!loading && !error && filteredErgebnisse.length === 0 && viewMode !== 'chart' && (
+        <div className="text-center py-12">
+          <Sparkles className="w-12 h-12 text-blue-500 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Noch keine Ergebnisse</h3>
+          <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+            {currentBetreuerData?.ROLLE === 'stationaer' 
+              ? 'Fügen Sie Ergebnisse für Ihre zugewiesenen Disziplinen hinzu.' 
+              : currentBetreuerData?.ROLLE === 'laufend'
+              ? 'Ihre Teams haben noch keine Ergebnisse. Besuchen Sie Disziplinen, um Punkte zu sammeln.'
+              : 'Fügen Sie neue Ergebnisse hinzu, um die Punktestände zu verfolgen.'}
+          </p>
+          <button
+            className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg inline-flex items-center"
+            onClick={() => {
+              openAddModal();
+              triggerHapticFeedback('light');
+            }}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Ergebnis hinzufügen
+          </button>
+        </div>
+      )}
       
       {/* Notification */}
       <AnimatePresence>
         {notification && (
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className={`mb-4 p-4 rounded-lg flex items-center ${
-              notification.type === 'success' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 
-              'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+            exit={{ opacity: 0, y: 50 }}
+            className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg ${
+              notification.type === 'success' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300'
             }`}
           >
-            {notification.type === 'success' ? 
-              <CheckCircle className="h-5 w-5 mr-3" /> : 
-              <AlertTriangle className="h-5 w-5 mr-3" />
-            }
-            <span>{notification.message}</span>
-            <button 
-              onClick={() => setNotification(null)}
-              className="ml-auto p-1 rounded-full hover:bg-white/20"
-            >
-              <X size={16} />
-            </button>
+            <div className="flex items-center">
+              {notification.type === 'success' ? (
+                <CheckCircle className="w-5 h-5 mr-2" />
+              ) : (
+                <AlertTriangle className="w-5 h-5 mr-2" />
+              )}
+              <p>{notification.message}</p>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Filter and Search Bar - Discord Style */}
-      <div className="mb-6 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-          <div className="relative flex-grow">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-5 w-5 text-slate-400" />
-            </div>
-            <input
-              type="text"
-              className="block w-full pl-10 pr-3 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent sm:text-sm"
-              placeholder="Suche nach Teams oder Disziplinen..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          
-          <div className="flex gap-3">
-            <select
-              className="block w-full px-3 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent sm:text-sm"
-              value={selectedTeam}
-              onChange={(e) => setSelectedTeam(e.target.value)}
-            >
-              <option value="all">Alle Teams</option>
-              {teams.map(team => (
-                <option key={team.TEAMID} value={team.TEAMID}>
-                  {team.NAME || `Team ${team.TEAMID}`}
-                </option>
-              ))}
-            </select>
-            
-            <select
-              className="block w-full px-3 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent sm:text-sm"
-              value={selectedDisziplin}
-              onChange={(e) => setSelectedDisziplin(e.target.value)}
-            >
-              <option value="all">Alle Disziplinen</option>
-              {disziplinen.map(disziplin => (
-                <option key={disziplin.DISZIPLINID} value={disziplin.DISZIPLINID}>
-                  {disziplin.NAME || `Disziplin ${disziplin.DISZIPLINID}`}
-                </option>
-              ))}
-            </select>
-            
-            <button
-              className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-800/30 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors flex items-center"
-              onClick={resetFilters}
-            >
-              <RefreshCw size={16} className="mr-2" />
-              Reset
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* View Options Bar */}
-      <div className="mb-6 flex justify-between items-center bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-3">
-        <div className="flex items-center space-x-1">
-          <button
-            className={`p-2 rounded-lg ${viewMode === 'card' ? 'bg-indigo-50 text-indigo-600 dark:bg-slate-700 dark:text-indigo-400' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'}`}
-            onClick={() => setViewMode('card')}
-            title="Card View"
-          >
-            <Grid size={20} />
-          </button>
-          <button
-            className={`p-2 rounded-lg ${viewMode === 'table' ? 'bg-indigo-50 text-indigo-600 dark:bg-slate-700 dark:text-indigo-400' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'}`}
-            onClick={() => setViewMode('table')}
-            title="Table View"
-          >
-            <List size={20} />
-          </button>
-          <button
-            className={`p-2 rounded-lg ${viewMode === 'chart' ? 'bg-indigo-50 text-indigo-600 dark:bg-slate-700 dark:text-indigo-400' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'}`}
-            onClick={() => setViewMode('chart')}
-            title="Chart View"
-          >
-            <BarChart3 size={20} />
-          </button>
-        </div>
-        
-        <div className="flex items-center text-sm text-slate-600 dark:text-slate-300">
-          <span className="hidden sm:inline mr-2">Sortieren nach:</span>
-          <div className="relative">
-            <button
-              className="flex items-center space-x-1 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700"
-              onClick={() => {
-                if (sortBy === 'punkte') {
-                  setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                } else {
-                  setSortBy('punkte');
-                  setSortOrder('desc');
-                }
-              }}
-            >
-              <span>
-                {sortBy === 'punkte' ? 'Punkte' : 
-                 sortBy === 'team' ? 'Team' : 'Disziplin'}
-              </span>
-              <ChevronDown size={16} className={`transition-transform ${sortOrder === 'asc' ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {/* Dropdown menu would go here in a production implementation */}
-          </div>
-        </div>
-      </div>
-
-      {loading && (
-        <div className="flex flex-col items-center justify-center py-12">
-          <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
-          <p className="text-slate-600 dark:text-slate-300">Daten werden geladen...</p>
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 rounded-lg mb-6">
-          <div className="flex">
-            <AlertTriangle className="h-6 w-6 text-red-500 mr-3 flex-shrink-0" />
-            <div>
-              <h3 className="text-red-800 dark:text-red-300 font-medium">Fehler beim Laden der Daten</h3>
-              <p className="text-red-700 dark:text-red-400 mt-1">{error}</p>
-              <p className="text-red-700 dark:text-red-400 mt-2">
-                Bitte stellen Sie sicher, dass der Server läuft und die Datenbankverbindung funktioniert.
-              </p>
-              <button 
-                onClick={fetchAllData}
-                className="mt-2 flex items-center px-3 py-1.5 bg-red-100 hover:bg-red-200 dark:bg-red-900/50 dark:hover:bg-red-900/80 text-red-800 dark:text-red-300 rounded-lg transition-colors"
-              >
-                <RefreshCw size={14} className="mr-2" />
-                Erneut versuchen
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!loading && !error && filteredErgebnisse.length === 0 && (
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-8 text-center shadow-sm border border-slate-100 dark:border-slate-700">
-          <img 
-            src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik0xMiAxNkMxNC4yMDkxIDE2IDE2IDE0LjIwOTEgMTYgMTJDMTYgOS43OTA4NiAxNC4yMDkxIDggMTIgOEM5Ljc5MDg2IDggOCA5Ljc5MDg2IDggMTJDOCAxNC4yMDkxIDkuNzkwODYgMTYgMTIgMTZaIiBzdHJva2U9IiM1ODY1RjIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTMgMTZWOEMzIDUuMjM4NTggNSAzIDggM0gxNkMxOC43NjE0IDMgMjEgNS4yMzg1OCAyMSA4VjE2QzIxIDE4Ljc2MTQgMTguNzYxNCAyMSAxNiAyMUg4QzUgMjEgMyAxOC43NjE0IDMgMTZaIiBzdHJva2U9IiM1ODY1RjIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTE3LjUgNi41VjYuNTEiIHN0cm9rZT0iIzU4NjVGMiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=" 
-            alt="No results"
-            className="mx-auto h-24 w-24 mb-4 opacity-30"
-          />
-          <h3 className="text-lg font-medium text-slate-800 dark:text-slate-200 mb-2">Keine Ergebnisse gefunden</h3>
-          <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto mb-6">
-            {searchQuery || selectedTeam !== 'all' || selectedDisziplin !== 'all'
-              ? 'Keine Ergebnisse entsprechen Ihren Filterkriterien. Versuchen Sie, Ihre Filter anzupassen.'
-              : 'Es wurden keine Ergebnisse in der Datenbank gefunden. Fügen Sie Ergebnisse hinzu, um sie hier anzuzeigen.'}
-          </p>
-          {searchQuery || selectedTeam !== 'all' || selectedDisziplin !== 'all' ? (
-            <button 
-              className="inline-flex items-center px-4 py-2 bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white rounded-lg transition-colors shadow-sm"
-              onClick={resetFilters}
-            >
-              <RefreshCw size={18} className="mr-2" />
-              Filter zurücksetzen
-            </button>
-          ) : (
-            <button 
-              className="inline-flex items-center px-4 py-2 bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white rounded-lg transition-colors shadow-sm"
-              onClick={openAddModal}
-            >
-              <Plus size={18} className="mr-2" />
-              Neues Ergebnis hinzufügen
-            </button>
-          )}
-        </div>
-      )}
-
-      {!loading && !error && filteredErgebnisse.length > 0 && (
-        <>
-          {viewMode === 'card' && renderCardView()}
-          {viewMode === 'table' && renderTableView()}
-          {viewMode === 'chart' && renderChartView()}
-        </>
-      )}
       
-      {/* Add Modal */}
+      {/* Add/Edit Result Modal */}
       <AnimatePresence>
-        {showAddModal && (
+        {(showAddModal || showEditModal) && (
           <>
             <motion.div
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+              className="fixed inset-0 bg-black bg-opacity-50 z-40"
+              initial="initial"
+              animate="animate"
+              exit="exit"
               variants={backdropVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              onClick={() => setShowAddModal(false)}
-            />
+              onClick={() => showAddModal ? setShowAddModal(false) : setShowEditModal(false)}
+            ></motion.div>
             <motion.div
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
-              variants={modalVariants}
+              className="fixed inset-0 flex items-center justify-center z-50 p-4"
               initial="initial"
               animate="animate"
               exit="exit"
+              variants={modalVariants}
             >
-              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg max-w-md w-full overflow-hidden">
-                {/* Discord-style header */}
-                <div className="bg-gradient-to-r from-[#5865F2] to-[#EB459E] p-4 text-white flex justify-between items-center">
-                  <h3 className="text-lg font-semibold flex items-center">
-                    <Sparkles className="mr-2" size={18} />
-                    Neues Ergebnis hinzufügen
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+                <div className="flex justify-between items-center border-b dark:border-gray-700 p-4">
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                    {showAddModal ? 'Ergebnis hinzufügen' : 'Ergebnis bearbeiten'}
                   </h3>
-                  <button 
-                    onClick={() => setShowAddModal(false)}
-                    className="p-1 rounded-full hover:bg-white/20 transition-colors"
+                  <button
+                    onClick={() => showAddModal ? setShowAddModal(false) : setShowEditModal(false)}
+                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
                   >
-                    <X size={18} />
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
-                <div className="p-6">
-                  <div className="grid gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        Team*
-                      </label>
+                <div className="p-4">
+                  <form>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Team</label>
                       <select
                         name="TEAMID"
                         value={formData.TEAMID}
                         onChange={handleChange}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         required
+                        disabled={currentBetreuerData?.ROLLE === 'laufend' && !isAdmin}
                       >
-                        <option value="" disabled>Team auswählen</option>
-                        {teams.map(team => (
-                          <option key={team.TEAMID} value={team.TEAMID}>
-                            {team.NAME || `Team ${team.TEAMID}`}
-                          </option>
+                        <option value="">Team auswählen</option>
+                        {accessibleItems.teams.map(team => (
+                          <option key={team.TEAMID} value={team.TEAMID}>{team.NAME}</option>
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        Disziplin*
-                      </label>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Disziplin</label>
                       <select
                         name="DISZIPLINID"
                         value={formData.DISZIPLINID}
                         onChange={handleChange}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         required
+                        disabled={currentBetreuerData?.ROLLE === 'stationaer' && !isAdmin}
                       >
-                        <option value="" disabled>Disziplin auswählen</option>
-                        {disziplinen.map(disziplin => (
-                          <option key={disziplin.DISZIPLINID} value={disziplin.DISZIPLINID}>
-                            {disziplin.NAME || `Disziplin ${disziplin.DISZIPLINID}`}
-                          </option>
+                        <option value="">Disziplin auswählen</option>
+                        {accessibleItems.disziplinen.map(disziplin => (
+                          <option key={disziplin.DISZIPLINID} value={disziplin.DISZIPLINID}>{disziplin.NAME}</option>
                         ))}
                       </select>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                          Punkte*
-                        </label>
-                        <input
-                          type="number"
-                          name="PUNKTE"
-                          value={formData.PUNKTE}
-                          onChange={handleChange}
-                          className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
-                          placeholder="z.B. 85"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                          Datum
-                        </label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Calendar size={16} className="text-slate-400" />
-                          </div>
-                          <input
-                            type="date"
-                            name="DATUM"
-                            value={formData.DATUM}
-                            onChange={handleChange}
-                            className="w-full pl-10 pr-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
-                          />
-                        </div>
-                      </div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Punkte</label>
+                      <input
+                        type="number"
+                        name="PUNKTE"
+                        value={formData.PUNKTE}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        required
+                        min="0"
+                        step="0.01"
+                      />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        Kommentar
-                      </label>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Datum</label>
+                      <input
+                        type="date"
+                        name="DATUM"
+                        value={formData.DATUM}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      />
+                    </div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Kommentar</label>
                       <textarea
                         name="KOMMENTAR"
                         value={formData.KOMMENTAR}
                         onChange={handleChange}
-                        rows={3}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
-                        placeholder="Optionaler Kommentar zu diesem Ergebnis"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        rows="3"
                       ></textarea>
                     </div>
-                  </div>
-
-                  <div className="mt-6 flex justify-end space-x-3">
-                    <button
-                      type="button"
-                      className="px-4 py-2 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                      onClick={() => setShowAddModal(false)}
-                    >
-                      Abbrechen
-                    </button>
-                    <button
-                      type="button"
-                      className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white rounded-lg transition-colors flex items-center"
-                      onClick={handleAddErgebnis}
-                    >
-                      <Save size={18} className="mr-2" />
-                      Speichern
-                    </button>
-                  </div>
+                  </form>
+                </div>
+                <div className="flex justify-end bg-gray-50 dark:bg-gray-700/50 p-4 rounded-b-lg">
+                  <button
+                    type="button"
+                    className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-lg mr-2 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                    onClick={() => showAddModal ? setShowAddModal(false) : setShowEditModal(false)}
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    type="button"
+                    className="px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                    onClick={() => {
+                      if (showAddModal) {
+                        handleAddErgebnis();
+                      } else {
+                        handleEditErgebnis();
+                      }
+                      triggerHapticFeedback('success');
+                    }}
+                  >
+                    <Save className="w-4 h-4 inline mr-1" />
+                    {showAddModal ? 'Hinzufügen' : 'Speichern'}
+                  </button>
                 </div>
               </div>
             </motion.div>
           </>
         )}
       </AnimatePresence>
-
-      {/* Edit Modal */}
-      <AnimatePresence>
-        {showEditModal && currentErgebnis && (
-          <>
-            <motion.div
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
-              variants={backdropVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              onClick={() => setShowEditModal(false)}
-            />
-            <motion.div
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
-              variants={modalVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-            >
-              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg max-w-md w-full overflow-hidden">
-                <div className="bg-gradient-to-r from-[#5865F2] to-[#EB459E] p-4 text-white flex justify-between items-center">
-                  <h3 className="text-lg font-semibold flex items-center">
-                    <Edit className="mr-2" size={18} />
-                    Ergebnis bearbeiten
-                  </h3>
-                  <button 
-                    onClick={() => setShowEditModal(false)}
-                    className="p-1 rounded-full hover:bg-white/20 transition-colors"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-                <div className="p-6">
-                  <div className="grid gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        Team*
-                      </label>
-                      <select
-                        name="TEAMID"
-                        value={formData.TEAMID}
-                        onChange={handleChange}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
-                        required
-                      >
-                        {teams.map(team => (
-                          <option key={team.TEAMID} value={team.TEAMID}>
-                            {team.NAME || `Team ${team.TEAMID}`}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        Disziplin*
-                      </label>
-                      <select
-                        name="DISZIPLINID"
-                        value={formData.DISZIPLINID}
-                        onChange={handleChange}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
-                        required
-                      >
-                        {disziplinen.map(disziplin => (
-                          <option key={disziplin.DISZIPLINID} value={disziplin.DISZIPLINID}>
-                            {disziplin.NAME || `Disziplin ${disziplin.DISZIPLINID}`}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                          Punkte*
-                        </label>
-                        <input
-                          type="number"
-                          name="PUNKTE"
-                          value={formData.PUNKTE}
-                          onChange={handleChange}
-                          className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
-                          placeholder="z.B. 85"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                          Datum
-                        </label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Calendar size={16} className="text-slate-400" />
-                          </div>
-                          <input
-                            type="date"
-                            name="DATUM"
-                            value={formData.DATUM}
-                            onChange={handleChange}
-                            className="w-full pl-10 pr-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        Kommentar
-                      </label>
-                      <textarea
-                        name="KOMMENTAR"
-                        value={formData.KOMMENTAR}
-                        onChange={handleChange}
-                        rows={3}
-                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent dark:bg-slate-700 dark:text-white"
-                        placeholder="Optionaler Kommentar zu diesem Ergebnis"
-                      ></textarea>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 flex justify-end space-x-3">
-                    <button
-                      type="button"
-                      className="px-4 py-2 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                      onClick={() => setShowEditModal(false)}
-                    >
-                      Abbrechen
-                    </button>
-                    <button
-                      type="button"
-                      className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white rounded-lg transition-colors flex items-center"
-                      onClick={handleEditErgebnis}
-                    >
-                      <Save size={18} className="mr-2" />
-                      Änderungen speichern
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
+      
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {showDeleteModal && currentErgebnis && (
           <>
             <motion.div
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+              className="fixed inset-0 bg-black bg-opacity-50 z-40"
+              initial="initial"
+              animate="animate"
+              exit="exit"
               variants={backdropVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
               onClick={() => setShowDeleteModal(false)}
-            />
+            ></motion.div>
             <motion.div
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
-              variants={modalVariants}
+              className="fixed inset-0 flex items-center justify-center z-50 p-4"
               initial="initial"
               animate="animate"
               exit="exit"
+              variants={modalVariants}
             >
-              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg max-w-md w-full overflow-hidden">
-                <div className="bg-red-500 p-4 text-white flex justify-between items-center">
-                  <h3 className="text-lg font-semibold flex items-center">
-                    <AlertTriangle className="mr-2" size={18} />
-                    Ergebnis löschen
-                  </h3>
-                  <button 
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+                <div className="flex justify-between items-center border-b dark:border-gray-700 p-4">
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Ergebnis löschen</h3>
+                  <button
                     onClick={() => setShowDeleteModal(false)}
-                    className="p-1 rounded-full hover:bg-white/20 transition-colors"
+                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
                   >
-                    <X size={18} />
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
-                <div className="p-6">
-                  <p className="text-slate-700 dark:text-slate-300 mb-4">
-                    Sind Sie sicher, dass Sie das Ergebnis von <span className="font-semibold">{currentErgebnis.teamName}</span> für die Disziplin <span className="font-semibold">{currentErgebnis.disziplinName}</span> löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.
+                <div className="p-4">
+                  <p className="text-gray-700 dark:text-gray-300 mb-4">
+                    Sind Sie sicher, dass Sie das Ergebnis von "{currentErgebnis.teamName}" in der Disziplin "{currentErgebnis.disziplinName}" löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.
                   </p>
-                  
-                  <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 rounded-r-lg mb-4">
-                    <p className="text-red-700 dark:text-red-400 text-sm">
-                      Die Punktzahl von {currentErgebnis.PUNKTE} wird dauerhaft gelöscht.
-                    </p>
+                  <div className="bg-amber-50 dark:bg-amber-900/30 border-l-4 border-amber-400 dark:border-amber-500 p-4">
+                    <div className="flex">
+                      <AlertTriangle className="h-5 w-5 text-amber-400 dark:text-amber-500 mr-2" />
+                      <p className="text-sm text-amber-700 dark:text-amber-300">
+                        Beim Löschen gehen alle zugehörigen Daten unwiderruflich verloren.
+                      </p>
+                    </div>
                   </div>
-
-                  <div className="flex justify-end space-x-3">
-                    <button
-                      type="button"
-                      className="px-4 py-2 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                      onClick={() => setShowDeleteModal(false)}
-                    >
-                      Abbrechen
-                    </button>
-                    <button
-                      type="button"
-                      className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors flex items-center"
-                      onClick={handleDeleteErgebnis}
-                    >
-                      <Trash2 size={18} className="mr-2" />
-                      Ergebnis löschen
-                    </button>
-                  </div>
+                </div>
+                <div className="flex justify-end bg-gray-50 dark:bg-gray-700/50 p-4 rounded-b-lg">
+                  <button
+                    type="button"
+                    className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-lg mr-2 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                    onClick={() => setShowDeleteModal(false)}
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    type="button"
+                    className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                    onClick={() => {
+                      handleDeleteErgebnis();
+                      triggerHapticFeedback('error');
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4 inline mr-1" />
+                    Löschen
+                  </button>
                 </div>
               </div>
             </motion.div>
@@ -1424,30 +1402,169 @@ const ErgebnissePage = () => {
         )}
       </AnimatePresence>
       
-      {/* Student Score Modal */}
+      {/* TeamDisciplineScoreModal */}
       {showStudentScoreModal && currentTeam && (
-        <TeamDisciplineScoreModal 
+        <TeamDisciplineScoreModal
           team={currentTeam}
-          onClose={() => setShowStudentScoreModal(false)} 
+          onClose={() => setShowStudentScoreModal(false)}
         />
       )}
       
-      {/* CSS Variables for dark mode support in charts */}
-      <style jsx>{`
-        :root {
-          --chart-text-color: #64748b;
-          --tooltip-bg: #ffffff;
-          --tooltip-border: #e2e8f0;
-          --chart-hover: #f8fafc33;
-        }
-        
-        .dark {
-          --chart-text-color: #94a3b8;
-          --tooltip-bg: #1e293b;
-          --tooltip-border: #334155;
-          --chart-hover: #1e293b80;
-        }
-      `}</style>
+      {/* Team Selection Modal (for stationäre Betreuer) */}
+      <AnimatePresence>
+        {showTeamSelectionModal && currentDisziplin && (
+          <>
+            <motion.div
+              className="fixed inset-0 bg-black bg-opacity-50 z-40"
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              variants={backdropVariants}
+              onClick={() => setShowTeamSelectionModal(false)}
+            ></motion.div>
+            <motion.div
+              className="fixed inset-0 flex items-center justify-center z-50 p-4"
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              variants={modalVariants}
+            >
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+                <div className="flex justify-between items-center border-b dark:border-gray-700 p-4">
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                    Team für {currentDisziplin.NAME} auswählen
+                  </h3>
+                  <button
+                    onClick={() => setShowTeamSelectionModal(false)}
+                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="p-4 max-h-96 overflow-y-auto">
+                  <div className="space-y-2">
+                    {teams.map((team) => (
+                      <div 
+                        key={team.TEAMID}
+                        className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer transition-colors"
+                        onClick={() => {
+                          // Add a new score for this team
+                          setFormData({
+                            ...formData,
+                            TEAMID: team.TEAMID,
+                            DISZIPLINID: currentDisziplin.DISZIPLINID
+                          });
+                          setShowTeamSelectionModal(false);
+                          setShowAddModal(true);
+                          triggerHapticFeedback('selection');
+                        }}
+                      >
+                        <h4 className="font-medium text-gray-900 dark:text-white">{team.NAME}</h4>
+                        {/* Show existing score if available */}
+                        {enhancedErgebnisse.some(e => e.TEAMID === team.TEAMID && e.DISZIPLINID === currentDisziplin.DISZIPLINID) && (
+                          <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                            Bereits bewertet: 
+                            <span className="ml-1 text-blue-600 dark:text-blue-400 font-medium">
+                              {enhancedErgebnisse.find(e => e.TEAMID === team.TEAMID && e.DISZIPLINID === currentDisziplin.DISZIPLINID)?.PUNKTE || 0} Punkte
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex justify-end bg-gray-50 dark:bg-gray-700/50 p-4 rounded-b-lg">
+                  <button
+                    type="button"
+                    className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                    onClick={() => setShowTeamSelectionModal(false)}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+      
+      {/* Disziplin Selection Modal (for laufende Betreuer) */}
+      <AnimatePresence>
+        {showDisziplinSelectionModal && currentTeam && (
+          <>
+            <motion.div
+              className="fixed inset-0 bg-black bg-opacity-50 z-40"
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              variants={backdropVariants}
+              onClick={() => setShowDisziplinSelectionModal(false)}
+            ></motion.div>
+            <motion.div
+              className="fixed inset-0 flex items-center justify-center z-50 p-4"
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              variants={modalVariants}
+            >
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+                <div className="flex justify-between items-center border-b dark:border-gray-700 p-4">
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                    Disziplin für {currentTeam.NAME} auswählen
+                  </h3>
+                  <button
+                    onClick={() => setShowDisziplinSelectionModal(false)}
+                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="p-4 max-h-96 overflow-y-auto">
+                  <div className="space-y-2">
+                    {disziplinen.map((disziplin) => (
+                      <div 
+                        key={disziplin.DISZIPLINID}
+                        className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer transition-colors"
+                        onClick={() => {
+                          // Add a new score for this disziplin
+                          setFormData({
+                            ...formData,
+                            TEAMID: currentTeam.TEAMID,
+                            DISZIPLINID: disziplin.DISZIPLINID
+                          });
+                          setShowDisziplinSelectionModal(false);
+                          setShowAddModal(true);
+                          triggerHapticFeedback('selection');
+                        }}
+                      >
+                        <h4 className="font-medium text-gray-900 dark:text-white">{disziplin.NAME}</h4>
+                        {/* Show existing score if available */}
+                        {enhancedErgebnisse.some(e => e.TEAMID === currentTeam.TEAMID && e.DISZIPLINID === disziplin.DISZIPLINID) && (
+                          <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                            Bereits bewertet: 
+                            <span className="ml-1 text-green-600 dark:text-green-400 font-medium">
+                              {enhancedErgebnisse.find(e => e.TEAMID === currentTeam.TEAMID && e.DISZIPLINID === disziplin.DISZIPLINID)?.PUNKTE || 0} Punkte
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex justify-end bg-gray-50 dark:bg-gray-700/50 p-4 rounded-b-lg">
+                  <button
+                    type="button"
+                    className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                    onClick={() => setShowDisziplinSelectionModal(false)}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

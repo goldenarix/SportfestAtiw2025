@@ -62,11 +62,71 @@ async function executeQuery(query, params = [], options = {}) {
 
 
 
-// BETREUER table operations mit manueller ID-Generierung
+// BETREUER table operations mit manueller ID-Generierung und erweiterten Funktionen
 const BetreuerController = {
   // Get all betreuer
   getAll: async () => {
     return await executeQuery('SELECT * FROM Betreuer ORDER BY BETREUERID');
+  },
+  
+  // Get all betreuer with their assignments (disziplinen or teams)
+  getAllWithAssignments: async () => {
+    let connection;
+    
+    try {
+      connection = await oracledb.getConnection('appPool');
+      
+      // Get all betreuer with basic info
+      const betreuerResult = await connection.execute(
+        'SELECT * FROM Betreuer ORDER BY BETREUERID',
+        [],
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      
+      const betreuer = betreuerResult.rows;
+      
+      // For each betreuer, get their disziplinen and teams based on role
+      for (let i = 0; i < betreuer.length; i++) {
+        if (betreuer[i].ROLLE === 'stationaer') {
+          // Get assigned disziplinen
+          const disziplinenResult = await connection.execute(
+            `SELECT d.* 
+             FROM Disziplin d
+             JOIN BETREUER_DISZIPLIN bd ON d.DISZIPLINID = bd.DISZIPLINID
+             WHERE bd.BETREUERID = :betreuerid`,
+            [betreuer[i].BETREUERID],
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+          );
+          
+          betreuer[i].disziplinen = disziplinenResult.rows || [];
+        } else if (betreuer[i].ROLLE === 'laufend') {
+          // Get assigned teams
+          const teamsResult = await connection.execute(
+            `SELECT t.* 
+             FROM Team t
+             JOIN BETREUER_TEAM bt ON t.TEAMID = bt.TEAMID
+             WHERE bt.BETREUERID = :betreuerid`,
+            [betreuer[i].BETREUERID],
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+          );
+          
+          betreuer[i].teams = teamsResult.rows || [];
+        }
+      }
+      
+      return { success: true, data: betreuer };
+    } catch (err) {
+      console.error('Error getting betreuer with assignments:', err);
+      return { success: false, error: err.message };
+    } finally {
+      if (connection) {
+        try {
+          await connection.close();
+        } catch (err) {
+          console.error('Error closing connection:', err);
+        }
+      }
+    }
   },
   
   // Get betreuer by ID
@@ -77,11 +137,95 @@ const BetreuerController = {
     );
   },
   
+  // Get betreuer by ID with assignments (disziplinen or teams)
+  getByIdWithAssignments: async (id) => {
+    let connection;
+    
+    try {
+      connection = await oracledb.getConnection('appPool');
+      
+      // Get betreuer info
+      const betreuerResult = await connection.execute(
+        'SELECT * FROM Betreuer WHERE BETREUERID = :id',
+        [id],
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      
+      if (betreuerResult.rows.length === 0) {
+        return { success: false, error: 'Betreuer nicht gefunden' };
+      }
+      
+      const betreuer = betreuerResult.rows[0];
+      
+      // Get assignments based on role
+      if (betreuer.ROLLE === 'stationaer') {
+        // Get assigned disziplinen
+        const disziplinenResult = await connection.execute(
+          `SELECT d.* 
+           FROM Disziplin d
+           JOIN BETREUER_DISZIPLIN bd ON d.DISZIPLINID = bd.DISZIPLINID
+           WHERE bd.BETREUERID = :betreuerid`,
+          [betreuer.BETREUERID],
+          { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        
+        betreuer.disziplinen = disziplinenResult.rows || [];
+      } else if (betreuer.ROLLE === 'laufend') {
+        // Get assigned teams
+        const teamsResult = await connection.execute(
+          `SELECT t.* 
+           FROM Team t
+           JOIN BETREUER_TEAM bt ON t.TEAMID = bt.TEAMID
+           WHERE bt.BETREUERID = :betreuerid`,
+          [betreuer.BETREUERID],
+          { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        
+        betreuer.teams = teamsResult.rows || [];
+      }
+      
+      return { success: true, data: betreuer };
+    } catch (err) {
+      console.error('Error getting betreuer by ID with assignments:', err);
+      return { success: false, error: err.message };
+    } finally {
+      if (connection) {
+        try {
+          await connection.close();
+        } catch (err) {
+          console.error('Error closing connection:', err);
+        }
+      }
+    }
+  },
+  
   // Get betreuer by name
   getByName: async (name) => {
     return await executeQuery(
       'SELECT * FROM Betreuer WHERE NAME = :name',
       [name]
+    );
+  },
+  
+  // Get disziplinen assigned to a betreuer
+  getDisziplinenByBetreuer: async (id) => {
+    return await executeQuery(
+      `SELECT d.* 
+       FROM Disziplin d
+       JOIN BETREUER_DISZIPLIN bd ON d.DISZIPLINID = bd.DISZIPLINID
+       WHERE bd.BETREUERID = :id`,
+      [id]
+    );
+  },
+  
+  // Get teams assigned to a betreuer
+  getTeamsByBetreuer: async (id) => {
+    return await executeQuery(
+      `SELECT t.* 
+       FROM Team t
+       JOIN BETREUER_TEAM bt ON t.TEAMID = bt.TEAMID
+       WHERE bt.BETREUERID = :id`,
+      [id]
     );
   },
   
@@ -133,7 +277,30 @@ const BetreuerController = {
       
       console.log('Insert result:', insertResult);
       
-      // For simple cases, let the extended controller handle assignments
+      // Handle disziplinen assignment if provided and role is stationaer
+      if (rolle === 'stationaer' && betreuer.disziplinen && Array.isArray(betreuer.disziplinen) && betreuer.disziplinen.length > 0) {
+        await Promise.all(betreuer.disziplinen.map(disziplinId => 
+          connection.execute(
+            'INSERT INTO BETREUER_DISZIPLIN (BETREUERID, DISZIPLINID) VALUES (:betreuerid, :disziplinid)',
+            { betreuerid: nextId, disziplinid: disziplinId },
+            { autoCommit: true }
+          )
+        ));
+        console.log(`Assigned ${betreuer.disziplinen.length} disziplinen to betreuer ${nextId}`);
+      }
+      
+      // Handle teams assignment if provided and role is laufend
+      if (rolle === 'laufend' && betreuer.teams && Array.isArray(betreuer.teams) && betreuer.teams.length > 0) {
+        await Promise.all(betreuer.teams.map(teamId => 
+          connection.execute(
+            'INSERT INTO BETREUER_TEAM (BETREUERID, TEAMID) VALUES (:betreuerid, :teamid)',
+            { betreuerid: nextId, teamid: teamId },
+            { autoCommit: true }
+          )
+        ));
+        console.log(`Assigned ${betreuer.teams.length} teams to betreuer ${nextId}`);
+      }
+      
       return { 
         success: true, 
         id: nextId,
@@ -153,7 +320,7 @@ const BetreuerController = {
     }
   },
   
-  // Update betreuer with debugging - now with ROLLE support
+  // Update betreuer with debugging - now with ROLLE support and assignments
   update: async (id, betreuer) => {
     console.log('Updating Betreuer:', id, betreuer);
     
@@ -162,6 +329,9 @@ const BetreuerController = {
     try {
       // Get connection directly for better control
       connection = await oracledb.getConnection('appPool');
+      
+      // Start transaction
+      await connection.execute('SET TRANSACTION READ WRITE');
       
       // Build dynamic SET clause based on provided fields
       let setClauses = [];
@@ -183,30 +353,85 @@ const BetreuerController = {
         binds.rolle = betreuer.ROLLE || betreuer.rolle;
       }
       
-      // Return early if no fields to update
-      if (setClauses.length === 0) {
-        console.log('No fields to update');
-        return { success: false, error: 'No fields to update' };
+      // Update basic betreuer info if there are field changes
+      if (setClauses.length > 0) {
+        // Construct the final UPDATE query
+        const query = `UPDATE Betreuer SET ${setClauses.join(', ')} WHERE BETREUERID = :id`;
+        console.log('Update query:', query);
+        console.log('Binds:', binds);
+        
+        const updateResult = await connection.execute(
+          query,
+          binds,
+          { autoCommit: false }
+        );
+        
+        console.log('Update result:', updateResult);
       }
       
-      // Construct the final UPDATE query
-      const query = `UPDATE Betreuer SET ${setClauses.join(', ')} WHERE BETREUERID = :id`;
-      console.log('Update query:', query);
-      console.log('Binds:', binds);
+      // Handle disziplinen assignment if provided
+      if (betreuer.disziplinen !== undefined && Array.isArray(betreuer.disziplinen)) {
+        // First delete existing associations
+        await connection.execute(
+          'DELETE FROM BETREUER_DISZIPLIN WHERE BETREUERID = :id',
+          [id],
+          { autoCommit: false }
+        );
+        
+        // Then insert new associations
+        if (betreuer.disziplinen.length > 0) {
+          await Promise.all(betreuer.disziplinen.map(disziplinId => 
+            connection.execute(
+              'INSERT INTO BETREUER_DISZIPLIN (BETREUERID, DISZIPLINID) VALUES (:betreuerid, :disziplinid)',
+              { betreuerid: id, disziplinid: disziplinId },
+              { autoCommit: false }
+            )
+          ));
+        }
+        
+        console.log(`Updated disziplinen assignments for betreuer ${id}`);
+      }
       
-      const updateResult = await connection.execute(
-        query,
-        binds,
-        { autoCommit: true }
-      );
+      // Handle teams assignment if provided
+      if (betreuer.teams !== undefined && Array.isArray(betreuer.teams)) {
+        // First delete existing associations
+        await connection.execute(
+          'DELETE FROM BETREUER_TEAM WHERE BETREUERID = :id',
+          [id],
+          { autoCommit: false }
+        );
+        
+        // Then insert new associations
+        if (betreuer.teams.length > 0) {
+          await Promise.all(betreuer.teams.map(teamId => 
+            connection.execute(
+              'INSERT INTO BETREUER_TEAM (BETREUERID, TEAMID) VALUES (:betreuerid, :teamid)',
+              { betreuerid: id, teamid: teamId },
+              { autoCommit: false }
+            )
+          ));
+        }
+        
+        console.log(`Updated team assignments for betreuer ${id}`);
+      }
       
-      console.log('Update result:', updateResult);
+      // Commit the transaction
+      await connection.commit();
       
       return { 
         success: true, 
-        rowsAffected: updateResult.rowsAffected
+        message: 'Betreuer erfolgreich aktualisiert'
       };
     } catch (err) {
+      // Rollback in case of error
+      if (connection) {
+        try {
+          await connection.rollback();
+        } catch (rollbackErr) {
+          console.error('Error during rollback:', rollbackErr);
+        }
+      }
+      
       console.error('Error updating Betreuer:', err);
       return { success: false, error: err.message };
     } finally {
@@ -269,6 +494,15 @@ const BetreuerController = {
         teamAssocDeleted: deleteTeamAssoc.rowsAffected
       };
     } catch (err) {
+      // Rollback in case of error
+      if (connection) {
+        try {
+          await connection.rollback();
+        } catch (rollbackErr) {
+          console.error('Error during rollback:', rollbackErr);
+        }
+      }
+      
       console.error('Error deleting Betreuer:', err);
       return { success: false, error: err.message };
     } finally {
@@ -282,9 +516,6 @@ const BetreuerController = {
     }
   }
 };
-
-
-
 
 
 
@@ -1125,6 +1356,23 @@ const schuelerController = {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // STATION table operations
 const StationController = {
   // Get all stations
@@ -1423,7 +1671,7 @@ async function getTableSchema(tableName) {
   );
 }
 
-// Export the controllers
+// Change this in module.exports at the bottom
 module.exports = {
   initialize,
   executeQuery,
@@ -1432,6 +1680,6 @@ module.exports = {
   DisziplinController,
   ErgebnisController,
   getTableSchema,
-  schuelerController,
+  SchuelerController: schuelerController, // Change this line (or rename the controller itself)
   StationController
 };

@@ -9,45 +9,13 @@ const TeamCreationForm = ({ onSuccess, onCancel, initialData = null }) => {
   const isAdmin = user?.role === 'admin';
   
   const [formData, setFormData] = useState({
-    NAME: initialData?.NAME || '',
-    BETREUERID: initialData?.BETREUERID || user?.id || null
+    NAME: initialData?.NAME || ''
+    // BETREUERID removed as per requirements
   });
   
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
-  const [betreuerList, setBetreuerList] = useState([]);
-  
-  // Load betreuer list if user is admin
-  useEffect(() => {
-    if (isAdmin) {
-      const fetchBetreuer = async () => {
-        try {
-          const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/betreuer`);
-          
-          if (!response.ok) {
-            throw new Error(`HTTP error: ${response.status}`);
-          }
-          
-          const result = await response.json();
-          
-          if (result.success) {
-            setBetreuerList(result.data || []);
-          } else {
-            throw new Error(result.error || 'Failed to load betreuer');
-          }
-        } catch (err) {
-          console.error('Error loading betreuer:', err);
-          setNotification({
-            type: 'error',
-            message: `Fehler beim Laden der Betreuer: ${err.message}`
-          });
-        }
-      };
-      
-      fetchBetreuer();
-    }
-  }, [isAdmin]);
   
   // Load existing team data if initialData is provided (for editing)
   useEffect(() => {
@@ -103,14 +71,6 @@ const TeamCreationForm = ({ onSuccess, onCancel, initialData = null }) => {
       setNotification({
         type: 'error',
         message: 'Bitte geben Sie einen Team-Namen ein.'
-      });
-      return false;
-    }
-    
-    if (!formData.BETREUERID) {
-      setNotification({
-        type: 'error',
-        message: 'Bitte wählen Sie einen Betreuer aus.'
       });
       return false;
     }
@@ -272,25 +232,7 @@ const TeamCreationForm = ({ onSuccess, onCancel, initialData = null }) => {
                 />
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Betreuer*
-                </label>
-                <select
-                  name="BETREUERID"
-                  value={formData.BETREUERID || ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent"
-                  required
-                >
-                  <option value="">Bitte wählen...</option>
-                  {betreuerList.map(betreuer => (
-                    <option key={betreuer.BETREUERID} value={betreuer.BETREUERID}>
-                      {betreuer.NAME || `Betreuer ${betreuer.BETREUERID}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Betreuer selection removed as per requirements */}
             </div>
           </div>
           

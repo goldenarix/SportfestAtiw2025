@@ -12,7 +12,6 @@ export const DataProvider = ({ children }) => {
     teamStudents: [],
     studentScores: [],
   });
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -31,6 +30,43 @@ export const DataProvider = ({ children }) => {
     } catch (err) {
       console.error('❌ Fehler beim Laden der Daten:', err);
       setError(err.message || 'Fehler beim Abrufen der Daten');
+      
+      // Falls /all nicht funktioniert, versuchen wir, die Daten einzeln zu laden
+      try {
+        // Betreuer laden
+        const betreuerRes = await fetch(`${API}/betreuer`);
+        const betreuerJson = await betreuerRes.json();
+        
+        // Teams laden
+        const teamsRes = await fetch(`${API}/teams`);
+        const teamsJson = await teamsRes.json();
+        
+        // Disziplinen laden
+        const disziplinsRes = await fetch(`${API}/disziplins`);
+        const disziplinsJson = await disziplinsRes.json();
+        
+        // Ergebnisse laden
+        const ergebnisseRes = await fetch(`${API}/ergebnisse`);
+        const ergebnisseJson = await ergebnisseRes.json();
+        
+        // Schüler laden
+        const studentsRes = await fetch(`${API}/schueler`);
+        const studentsJson = await studentsRes.json();
+        
+        setData({
+          betreuer: betreuerJson.success ? betreuerJson.data : [],
+          teams: teamsJson.success ? teamsJson.data : [],
+          disziplins: disziplinsJson.success ? disziplinsJson.data : [],
+          ergebnisse: ergebnisseJson.success ? ergebnisseJson.data : [],
+          students: studentsJson.success ? studentsJson.data : [],
+          studentScores: ergebnisseJson.success ? ergebnisseJson.data.filter(result => result.SCHUELERID) : []
+        });
+        
+        setError(null);
+      } catch (fallbackErr) {
+        console.error('❌ Fehler beim Laden der einzelnen Daten:', fallbackErr);
+        setError('Fehler beim Laden der Daten. Bitte versuchen Sie es später erneut.');
+      }
     } finally {
       setLoading(false);
     }

@@ -1,0 +1,162 @@
+-- schema_updates.sql
+-- SQL script containing all the schema changes required for the role-based betreuer implementation
+
+-- Add ROLLE column to BETREUER table
+ALTER TABLE BETREUER ADD COLUMN ROLLE VARCHAR(20);
+
+-- Update existing betreuer to have stationaer role
+UPDATE BETREUER SET ROLLE = "stationaer" WHERE ROLLE IS NULL;
+
+-- Create table for mapping betreuer to disciplines (for stationaer betreuer)
+CREATE TABLE IF NOT EXISTS BETREUER_DISZIPLIN (
+  BETREUERID INT NOT NULL,
+  DISZIPLINID INT NOT NULL,
+  PRIMARY KEY (BETREUERID, DISZIPLINID),
+  FOREIGN KEY (BETREUERID) REFERENCES BETREUER(BETREUERID) ON DELETE CASCADE,
+  FOREIGN KEY (DISZIPLINID) REFERENCES DISZIPLIN(DISZIPLINID) ON DELETE CASCADE
+);
+
+-- Create table for mapping betreuer to teams (for laufend betreuer)
+CREATE TABLE IF NOT EXISTS BETREUER_TEAM (
+  BETREUERID INT NOT NULL,
+  TEAMID INT NOT NULL,
+  PRIMARY KEY (BETREUERID, TEAMID),
+  FOREIGN KEY (BETREUERID) REFERENCES BETREUER(BETREUERID) ON DELETE CASCADE,
+  FOREIGN KEY (TEAMID) REFERENCES TEAM(TEAMID) ON DELETE CASCADE
+);
+
+-- Create SCHUELER table for student data
+CREATE TABLE IF NOT EXISTS SCHUELER (
+  SCHUELERID INT PRIMARY KEY,
+  VORNAME VARCHAR(100) NOT NULL,
+  NACHNAME VARCHAR(100) NOT NULL,
+  GEBURTSDATUM DATE,
+  GESCHLECHT CHAR(1),
+  KLASSE VARCHAR(10),
+  TEAMID INT,
+  FOREIGN KEY (TEAMID) REFERENCES TEAM(TEAMID) ON DELETE SET NULL
+);
+
+-- Add indexes for faster lookups
+CREATE INDEX idx_schueler_team ON SCHUELER(TEAMID);
+CREATE INDEX idx_schueler_name ON SCHUELER(NACHNAME, VORNAME);
+CREATE INDEX idx_betreuer_disziplin_betreuer ON BETREUER_DISZIPLIN(BETREUERID);
+CREATE INDEX idx_betreuer_disziplin_disziplin ON BETREUER_DISZIPLIN(DISZIPLINID);
+CREATE INDEX idx_betreuer_team_betreuer ON BETREUER_TEAM(BETREUERID);
+CREATE INDEX idx_betreuer_team_team ON BETREUER_TEAM(TEAMID);
+CREATE INDEX idx_betreuer_rolle ON BETREUER(ROLLE);
+
+-- Migrate existing data - populate betreuer assignments
+-- For stations that already have betreuer assigned
+INSERT INTO BETREUER_DISZIPLIN (BETREUERID, DISZIPLINID)
+SELECT d.BETREUERID, d.DISZIPLINID
+FROM DISZIPLIN d
+WHERE d.BETREUERID IS NOT NULL;
+
+-- For teams that already have betreuer assigned, first identify betreuer
+-- and mark them as 'laufend', then create the assignments
+UPDATE BETREUER b
+SET b.ROLLE = 'laufend'
+WHERE EXISTS (
+  SELECT 1
+  FROM TEAM t
+  WHERE t.BETREUERID = b.BETREUERID
+);
+
+-- Create the team assignments for laufend betreuer
+INSERT INTO BETREUER_TEAM (BETREUERID, TEAMID)
+SELECT t.BETREUERID, t.TEAMID
+FROM TEAM t
+WHERE t.BETREUERID IS NOT NULL;
+
+-- Now we can remove the BETREUERID column from DISZIPLIN and TEAM tables
+-- These columns will no longer be used, as we're using the join tables instead
+
+-- For DISZIPLIN table
+ALTER TABLE DISZIPLIN DROP COLUMN BETREUERID;
+
+-- For TEAM table
+ALTER TABLE TEAM DROP COLUMN BETREUERID;
+
+-- Create views to make querying easier
+
+-- View for stationaer betreuer with their disziplinen
+CREATE OR REPLACE VIEW V_STATIONAER_BETREUER AS
+SELECT 
+    b.BETREUERID,
+    b.NAME,
+    b.ROLLE,
+    COUNT(bd.DISZIPLINID) AS DISZIPLIN_COUNT
+FROM 
+    BETREUER b
+LEFT JOIN 
+    BETREUER_DISZIPLIN bd ON b.BETREUERID = bd.BETREUERID
+WHERE 
+    b.ROLLE = 'stationaer'
+GROUP BY 
+    b.BETREUERID, b.NAME, b.ROLLE;
+
+-- View for laufend betreuer with their teams
+CREATE OR REPLACE VIEW V_LAUFEND_BETREUER AS
+SELECT 
+    b.BETREUERID,
+    b.NAME,
+    b.ROLLE,
+    COUNT(bt.TEAMID) AS TEAM_COUNT
+FROM 
+    BETREUER b
+LEFT JOIN 
+    BETREUER_TEAM bt ON b.BETREUERID = bt.BETREUERID
+WHERE 
+    b.ROLLE = 'laufend'
+GROUP BY 
+    b.BETREUERID, b.NAME, b.ROLLE;
+
+-- View for teams with their students
+CREATE OR REPLACE VIEW V_TEAM_STUDENTS AS
+SELECT 
+    t.TEAMID,
+    t.NAME AS TEAM_NAME,
+    t.FARBE,
+    COUNT(s.SCHUELERID) AS STUDENT_COUNT
+FROM 
+    TEAM t
+LEFT JOIN 
+    SCHUELER s ON t.TEAMID = s.TEAMID
+GROUP BY 
+    t.TEAMID, t.NAME, t.FARBE;
+
+-- View for disciplines with their assigned betreuer
+CREATE OR REPLACE VIEW V_DISZIPLIN_BETREUER AS
+SELECT 
+    d.DISZIPLINID,
+    d.NAME AS DISZIPLIN_NAME,
+    d.BESCHREIBUNG,
+    d.MAXPUNKTE,
+    b.BETREUERID,
+    b.NAME AS BETREUER_NAME
+FROM 
+    DISZIPLIN d
+LEFT JOIN 
+    BETREUER_DISZIPLIN bd ON d.DISZIPLINID = bd.DISZIPLINID
+LEFT JOIN 
+    BETREUER b ON bd.BETREUERID = b.BETREUERID;
+
+-- View for team results across all disciplines
+CREATE OR REPLACE VIEW V_TEAM_RESULTS AS
+SELECT 
+    t.TEAMID,
+    t.NAME AS TEAM_NAME,
+    t.FARBE,
+    d.DISZIPLINID,
+    d.NAME AS DISZIPLIN_NAME,
+    SUM(e.PUNKTE) AS TOTAL_POINTS,
+    COUNT(e.SCHUELERID) AS PARTICIPANTS
+FROM 
+    TEAM t
+JOIN 
+    ERGEBNIS e ON t.TEAMID = e.TEAMID
+JOIN 
+    DISZIPLIN d ON e.DISZIPLINID = d.DISZIPLINID
+GROUP BY 
+    t.TEAMID, t.NAME, t.FARBE, d.DISZIPLINID, d.NAME;
