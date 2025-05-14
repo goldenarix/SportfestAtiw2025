@@ -164,6 +164,7 @@ const ErgebnissePage = () => {
       setLoading(true);
       
       const baseUrl = import.meta.env.VITE_API_URL || '';
+      console.log("Betreuer ID beim Abrufen:", betreuerID);
       const response = await fetch(`${baseUrl}/betreuer/${betreuerID}?withAssignments=true`);
       
       if (!response.ok) {
@@ -174,6 +175,8 @@ const ErgebnissePage = () => {
       
       if (result.success && result.data) {
         console.log("Betreuer data loaded:", result.data);
+        console.log("Zugewiesene Teams:", result.data.teams);
+        console.log("Betreuer Rolle:", result.data.ROLLE);
         setCurrentBetreuerData(result.data);
       } else {
         throw new Error('Failed to load betreuer data');
@@ -415,36 +418,45 @@ const ErgebnissePage = () => {
     });
   }, [ergebnisse, teams, disziplinen]);
 
-  // Accessible items based on betreuer role
-  const accessibleItems = useMemo(() => {
-    if (!currentBetreuerData || isAdmin) {
-      // Admins or users without role restrictions can see everything
-      return {
-        disziplinen: disziplinen,
-        teams: teams,
-        isDisziplinenRestricted: false,
-        isTeamsRestricted: false
-      };
-    }
 
-    // Get assigned disziplinen and teams based on role
-    const betreuerDisziplinen = 
-      currentBetreuerData.ROLLE === 'stationaer' && currentBetreuerData.disziplinen 
-        ? disziplinen.filter(d => currentBetreuerData.disziplinen.some(bd => bd.DISZIPLINID === d.DISZIPLINID))
-        : [];
-
-    const betreuerTeams = 
-      currentBetreuerData.ROLLE === 'laufend' && currentBetreuerData.teams
-        ? teams.filter(t => currentBetreuerData.teams.some(bt => bt.TEAMID === t.TEAMID))
-        : [];
-
+// Korrigierte accessibleItems Funktion
+const accessibleItems = useMemo(() => {
+  if (!currentBetreuerData || isAdmin) {
+    // Admins können alles sehen
     return {
-      disziplinen: betreuerDisziplinen.length > 0 ? betreuerDisziplinen : disziplinen,
-      teams: betreuerTeams.length > 0 ? betreuerTeams : teams,
-      isDisziplinenRestricted: currentBetreuerData.ROLLE === 'stationaer',
-      isTeamsRestricted: currentBetreuerData.ROLLE === 'laufend'
+      disziplinen: disziplinen,
+      teams: teams,
+      isDisziplinenRestricted: false,
+      isTeamsRestricted: false
     };
-  }, [currentBetreuerData, disziplinen, teams, isAdmin]);
+  }
+
+  // Zugewiesene Disziplinen auf Basis der Rolle holen
+  const betreuerDisziplinen = 
+    currentBetreuerData.ROLLE === 'stationaer' && currentBetreuerData.disziplinen 
+      ? disziplinen.filter(d => currentBetreuerData.disziplinen.some(bd => bd.DISZIPLINID === d.DISZIPLINID))
+      : [];
+
+  // Zugewiesene Teams - unabhängig von der Rolle
+  const betreuerTeams = 
+    currentBetreuerData.teams && currentBetreuerData.teams.length > 0
+      ? teams.filter(t => currentBetreuerData.teams.some(bt => bt.TEAMID === t.TEAMID))
+      : [];
+
+  console.log("Betreuer ID:", currentBetreuerData.BETREUERID);
+  console.log("Zugewiesene Teams für Betreuer:", betreuerTeams);
+
+  return {
+    // Stationäre Betreuer sehen nur zugewiesene Disziplinen
+    disziplinen: currentBetreuerData.ROLLE === 'stationaer' ? betreuerDisziplinen : disziplinen,
+    
+    // Alle Betreuer sehen nur ihre zugewiesenen Teams - unabhängig von der Rolle
+    teams: betreuerTeams,
+    
+    isDisziplinenRestricted: currentBetreuerData.ROLLE === 'stationaer',
+    isTeamsRestricted: true // Immer auf true für nicht-Admin-Benutzer
+  };
+}, [currentBetreuerData, disziplinen, teams, isAdmin]);
 
   // Filtered and sorted ergebnisse
   const filteredErgebnisse = useMemo(() => {
@@ -469,8 +481,8 @@ const ErgebnissePage = () => {
           if (currentBetreuerData.ROLLE === 'stationaer') {
             // Stationäre Betreuer can only see results for their assigned disciplines
             matchesRole = currentBetreuerData.disziplinen?.some(d => d.DISZIPLINID === ergebnis.DISZIPLINID) || false;
-          } else if (currentBetreuerData.ROLLE === 'laufend') {
-            // Laufende Betreuer can only see results for their assigned teams
+          } else {
+            // Alle anderen Betreuer sehen nur Ergebnisse für ihre zugewiesenen Teams
             matchesRole = currentBetreuerData.teams?.some(t => t.TEAMID === ergebnis.TEAMID) || false;
           }
         }
@@ -594,161 +606,201 @@ const ErgebnissePage = () => {
   const renderStationaerView = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <AnimatePresence>
-        {accessibleItems.disziplinen.map((disziplin, index) => (
-          <motion.div
-            key={disziplin.DISZIPLINID}
-            className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-100 dark:border-slate-700"
-            variants={itemVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            custom={index}
-            whileHover="hover"
-            onClick={() => openDisziplinDetailPage(disziplin)}
-            layout
-          >
-            <div className="p-5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-semibold text-slate-800 dark:text-white text-lg">
-                    {disziplin.NAME}
-                  </h3>
-                  <p className="text-slate-600 dark:text-slate-300 text-sm mt-1">
-                    {disziplin.BESCHREIBUNG || "Keine Beschreibung verfügbar"}
-                  </p>
+        {accessibleItems.disziplinen.length === 0 ? (
+          <div className="col-span-full bg-white dark:bg-slate-800 rounded-xl p-8 shadow-sm border border-slate-100 dark:border-slate-700 text-center">
+            <MapPin size={64} className="mx-auto mb-4 text-blue-500" />
+            <h3 className="text-xl font-semibold mb-2">Keine Disziplinen zugewiesen</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              Ihnen wurden noch keine Disziplinen zugewiesen. Bitte kontaktieren Sie einen Administrator.
+            </p>
+            <button
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg inline-flex items-center"
+              onClick={() => navigate('/dashboard')}
+            >
+              Zurück zum Dashboard
+            </button>
+          </div>
+        ) : (
+          accessibleItems.disziplinen.map((disziplin, index) => (
+            <motion.div
+              key={disziplin.DISZIPLINID}
+              className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-100 dark:border-slate-700"
+              variants={itemVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              custom={index}
+              whileHover="hover"
+              onClick={() => openDisziplinDetailPage(disziplin)}
+              layout
+            >
+              <div className="p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="font-semibold text-slate-800 dark:text-white text-lg">
+                      {disziplin.NAME}
+                    </h3>
+                    <p className="text-slate-600 dark:text-slate-300 text-sm mt-1">
+                      {disziplin.BESCHREIBUNG || "Keine Beschreibung verfügbar"}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                    <MapPin size={20} />
+                  </div>
                 </div>
-                <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-                  <MapPin size={20} />
-                </div>
-              </div>
-              
-              <div className="mt-4 grid gap-2">
-                {ergebnisse
-                  .filter(e => e.DISZIPLINID === disziplin.DISZIPLINID)
-                  .slice(0, 3)
-                  .map((ergebnis, idx) => {
-                    const team = teams.find(t => t.TEAMID === ergebnis.TEAMID);
-                    return (
-                      <div key={ergebnis.ERGEBNISID} className="p-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center">
-                            {idx === 0 && <Trophy className="text-yellow-400 mr-2" size={16} />}
-                            <span className="font-medium text-slate-700 dark:text-slate-300">
-                              {team?.NAME || `Team ${ergebnis.TEAMID}`}
+                
+                <div className="mt-4 grid gap-2">
+                  {ergebnisse
+                    .filter(e => e.DISZIPLINID === disziplin.DISZIPLINID)
+                    .slice(0, 3)
+                    .map((ergebnis, idx) => {
+                      const team = teams.find(t => t.TEAMID === ergebnis.TEAMID);
+                      return (
+                        <div key={ergebnis.ERGEBNISID} className="p-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center">
+                              {idx === 0 && <Trophy className="text-yellow-400 mr-2" size={16} />}
+                              <span className="font-medium text-slate-700 dark:text-slate-300">
+                                {team?.NAME || `Team ${ergebnis.TEAMID}`}
+                              </span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${getPointsColor(ergebnis.PUNKTE)}`}>
+                              {ergebnis.PUNKTE || 0}
                             </span>
                           </div>
-                          <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${getPointsColor(ergebnis.PUNKTE)}`}>
-                            {ergebnis.PUNKTE || 0}
-                          </span>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                </div>
+                
+                <button 
+                  className="mt-4 w-full py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-800/30 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors text-sm font-medium flex items-center justify-center"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openTeamSelectionModal(disziplin);
+                  }}
+                >
+                  <Plus size={16} className="mr-2" />
+                  Team auswählen
+                </button>
               </div>
               
-              <button 
-                className="mt-4 w-full py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-800/30 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors text-sm font-medium flex items-center justify-center"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openTeamSelectionModal(disziplin);
-                }}
-              >
-                <Plus size={16} className="mr-2" />
-                Team auswählen
-              </button>
-            </div>
-            
-            {/* Discord-style gradient bottom border */}
-            <div className="h-1" style={{ 
-              background: 'linear-gradient(90deg, #5865F2 0%, #EB459E 100%)'
-            }}></div>
-          </motion.div>
-        ))}
+              {/* Gradient bottom border */}
+              <div className="h-1" style={{ 
+                background: 'linear-gradient(90deg, #5865F2 0%, #EB459E 100%)'
+              }}></div>
+            </motion.div>
+          ))
+        )}
       </AnimatePresence>
     </div>
   );
 
   // Render function for laufend betreuer (team cards)
-  const renderLaufendView = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <AnimatePresence>
-        {accessibleItems.teams.map((team, index) => (
-          <motion.div
-            
-          
-
-
-          key={team.TEAMID}
-            className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-100 dark:border-slate-700"
-            variants={itemVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            custom={index}
-            whileHover="hover"
-            onClick={() => openTeamDetailPage(team)}
-            layout
-          >
-            <div className="p-5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-semibold text-slate-800 dark:text-white text-lg">
-                    {team.NAME}
-                  </h3>
-                  <p className="text-slate-600 dark:text-slate-300 text-sm mt-1">
-                    {team.BESCHREIBUNG || "Keine Beschreibung verfügbar"}
-                  </p>
-                </div>
-                <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
-                  <Map size={20} />
-                </div>
-              </div>
-              
-              <div className="mt-4 grid gap-2">
-                {enhancedErgebnisse
-                  .filter(e => e.TEAMID === team.TEAMID)
-                  .sort((a, b) => b.punkteNumber - a.punkteNumber)
-                  .slice(0, 3)
-                  .map((ergebnis) => {
-                    const disziplin = disziplinen.find(d => d.DISZIPLINID === ergebnis.DISZIPLINID);
-                    return (
-                      <div key={ergebnis.ERGEBNISID} className="p-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center">
-                            <span className="font-medium text-slate-700 dark:text-slate-300">
-                              {disziplin?.NAME || `Disziplin ${ergebnis.DISZIPLINID}`}
-                            </span>
-                          </div>
-                          <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${getPointsColor(ergebnis.PUNKTE)}`}>
-                            {ergebnis.PUNKTE || 0}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-              
-              <button 
-                className="mt-4 w-full py-2 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-800/30 text-green-600 dark:text-green-400 rounded-lg transition-colors text-sm font-medium flex items-center justify-center"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openDisziplinSelectionModal(team);
-                }}
+  const renderLaufendView = () => {
+    // Hier explizit loggen, welche Teams angezeigt werden
+    console.log("Anzahl Teams in renderLaufendView:", accessibleItems.teams.length);
+    
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <AnimatePresence>
+          {accessibleItems.teams.length === 0 ? (
+            <div className="col-span-full bg-white dark:bg-slate-800 rounded-xl p-8 shadow-sm border border-slate-100 dark:border-slate-700 text-center">
+              <Map size={64} className="mx-auto mb-4 text-green-500" />
+              <h3 className="text-xl font-semibold mb-2">Keine Teams zugewiesen</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Ihnen wurden noch keine Teams zugewiesen. Bitte kontaktieren Sie einen Administrator.
+              </p>
+              <button
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg inline-flex items-center"
+                onClick={() => navigate('/dashboard')}
               >
-                <Plus size={16} className="mr-2" />
-                Disziplin auswählen
+                Zurück zum Dashboard
               </button>
             </div>
-            
-            {/* Discord-style gradient bottom border */}
-            <div className="h-1" style={{ 
-              background: 'linear-gradient(90deg, #57F287 0%, #3BA55C 100%)'
-            }}></div>
-          </motion.div>
-        ))}
-      </AnimatePresence>
-    </div>
-  );
+          ) : (
+            accessibleItems.teams.map((team, index) => (
+              <motion.div
+                key={team.TEAMID}
+                className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-100 dark:border-slate-700"
+                variants={itemVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                custom={index}
+                whileHover="hover"
+                onClick={() => openTeamDetailPage(team)}
+                layout
+              >
+                <div className="p-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="font-semibold text-slate-800 dark:text-white text-lg">
+                        {team.NAME}
+                      </h3>
+                      <p className="text-slate-600 dark:text-slate-300 text-sm mt-1">
+                        {team.BESCHREIBUNG || "Keine Beschreibung verfügbar"}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
+                      <Map size={20} />
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 grid gap-2">
+                    {enhancedErgebnisse
+                      .filter(e => e.TEAMID === team.TEAMID)
+                      .sort((a, b) => b.punkteNumber - a.punkteNumber)
+                      .slice(0, 3)
+                      .map((ergebnis) => {
+                        const disziplin = disziplinen.find(d => d.DISZIPLINID === ergebnis.DISZIPLINID);
+                        return (
+                          <div key={ergebnis.ERGEBNISID} className="p-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center">
+                                <span className="font-medium text-slate-700 dark:text-slate-300">
+                                  {disziplin?.NAME || `Disziplin ${ergebnis.DISZIPLINID}`}
+                                </span>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${getPointsColor(ergebnis.PUNKTE)}`}>
+                                {ergebnis.PUNKTE || 0}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                  
+                  <button 
+                    className="mt-4 w-full py-2 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-800/30 text-green-600 dark:text-green-400 rounded-lg transition-colors text-sm font-medium flex items-center justify-center"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openDisziplinSelectionModal(team);
+                    }}
+                  >
+                    <Plus size={16} className="mr-2" />
+                    Disziplin auswählen
+                  </button>
+                </div>
+                
+                {/* Gradient bottom border */}
+                <div className="h-1" style={{ 
+                  background: 'linear-gradient(90deg, #57F287 0%, #3BA55C 100%)'
+                }}></div>
+              </motion.div>
+            ))
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
+
+ 
+      console.log("Accessible Teams:", accessibleItems.teams);
+      console.log("All Teams:", teams);
+
+      
+
 
   return (
     <motion.div 
@@ -780,99 +832,148 @@ const ErgebnissePage = () => {
         </p>
       </div>
 
-      {/* Search and filter controls */}
-      <div className="mb-6 flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
-        <div className="relative flex-grow">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <input
-            type="text"
-            placeholder="Nach Team oder Disziplin suchen..."
-            className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-        
-        {/* View mode selector */}
-        <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
-          <button
-            className={`p-2 rounded ${viewMode === 'card' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
-            onClick={() => setViewMode('card')}
-            aria-label="Card view"
-          >
-            <Grid className="w-5 h-5" />
-          </button>
-          <button
-            className={`p-2 rounded ${viewMode === 'table' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
-            onClick={() => setViewMode('table')}
-            aria-label="Table view"
-          >
-            <List className="w-5 h-5" />
-          </button>
-          <button
-            className={`p-2 rounded ${viewMode === 'chart' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
-            onClick={() => setViewMode('chart')}
-            aria-label="Chart view"
-          >
-            <BarChart3 className="w-5 h-5" />
-          </button>
-        </div>
-        
-        {/* Team selector */}
-        {(!currentBetreuerData?.ROLLE || currentBetreuerData?.ROLLE !== 'laufend' || isAdmin) && (
-          <div className="relative">
-            <select
-              className="pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 appearance-none"
-              value={selectedTeam}
-              onChange={(e) => setSelectedTeam(e.target.value)}
-            >
-              <option value="all">Alle Teams</option>
-              {accessibleItems.teams.map(team => (
-                <option key={team.TEAMID} value={team.TEAMID}>{team.NAME}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          </div>
-        )}
-        
-        {/* Disziplin selector */}
-        {(!currentBetreuerData?.ROLLE || currentBetreuerData?.ROLLE !== 'stationaer' || isAdmin) && (
-          <div className="relative">
-            <select
-              className="pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 appearance-none"
-              value={selectedDisziplin}
-              onChange={(e) => setSelectedDisziplin(e.target.value)}
-            >
-              <option value="all">Alle Disziplinen</option>
-              {accessibleItems.disziplinen.map(disziplin => (
-                <option key={disziplin.DISZIPLINID} value={disziplin.DISZIPLINID}>{disziplin.NAME}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          </div>
-        )}
-        
-        {/* Reset filters button */}
-        <button
-          className="flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-          onClick={resetFilters}
-        >
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Filter zurücksetzen
-        </button>
-        
-        {/* Add result button */}
-        <button
-          className="flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg ml-auto"
-          onClick={() => {
-            openAddModal();
-            triggerHapticFeedback('light');
-          }}
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Ergebnis hinzufügen
-        </button>
-      </div>
+      {/* Search and filter controls - different UIs for admin vs betreuer */}
+      {!loading && !error && (
+        <>
+          {/* Admin UI with advanced filters */}
+          {isAdmin ? (
+            <div className="mb-6 flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+              <div className="relative flex-grow">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Nach Team oder Disziplin suchen..."
+                  className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              
+              {/* View mode selector */}
+              <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+                <button
+                  className={`p-2 rounded ${viewMode === 'card' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+                  onClick={() => setViewMode('card')}
+                  aria-label="Card view"
+                >
+                  <Grid className="w-5 h-5" />
+                </button>
+                <button
+                  className={`p-2 rounded ${viewMode === 'table' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+                  onClick={() => setViewMode('table')}
+                  aria-label="Table view"
+                >
+                  <List className="w-5 h-5" />
+                </button>
+                <button
+                  className={`p-2 rounded ${viewMode === 'chart' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+                  onClick={() => setViewMode('chart')}
+                  aria-label="Chart view"
+                >
+                  <BarChart3 className="w-5 h-5" />
+                </button>
+              </div>
+              
+              {/* Team selector */}
+              <div className="relative">
+                <select
+                  className="pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 appearance-none"
+                  value={selectedTeam}
+                  onChange={(e) => setSelectedTeam(e.target.value)}
+                >
+                  <option value="all">Alle Teams</option>
+                  {teams.map(team => (
+                    <option key={team.TEAMID} value={team.TEAMID}>{team.NAME}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              </div>
+              
+              {/* Disziplin selector */}
+              <div className="relative">
+                <select
+                  className="pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 appearance-none"
+                  value={selectedDisziplin}
+                  onChange={(e) => setSelectedDisziplin(e.target.value)}
+                >
+                  <option value="all">Alle Disziplinen</option>
+                  {disziplinen.map(disziplin => (
+                    <option key={disziplin.DISZIPLINID} value={disziplin.DISZIPLINID}>{disziplin.NAME}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              </div>
+              
+              {/* Reset filters button */}
+              <button
+                className="flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                onClick={resetFilters}
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Filter zurücksetzen
+              </button>
+              
+              {/* Add result button */}
+              <button
+                className="flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg ml-auto"
+                onClick={() => {
+                  openAddModal();
+                  triggerHapticFeedback('light');
+                }}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Ergebnis hinzufügen
+              </button>
+            </div>
+          ) : (
+            /* Simplified Betreuer UI with just search and view toggle */
+            <div className="mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="relative flex-grow max-w-md">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    placeholder="Schnellsuche..."
+                    className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+                    <button
+                      className={`p-2 rounded ${viewMode === 'card' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+                      onClick={() => setViewMode('card')}
+                      aria-label="Card view"
+                    >
+                      <Grid className="w-5 h-5" />
+                    </button>
+                    <button
+                      className={`p-2 rounded ${viewMode === 'table' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+                      onClick={() => setViewMode('table')}
+                      aria-label="Table view"
+                    >
+                      <List className="w-5 h-5" />
+                    </button>
+                  </div>
+                  
+                  <button
+                    className="flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+                    onClick={() => {
+                      openAddModal();
+                      triggerHapticFeedback('light');
+                    }}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Ergebnis hinzufügen
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Loading state */}
       {loading && (
@@ -891,16 +992,61 @@ const ErgebnissePage = () => {
         </div>
       )}
       
-      {/* Role-based views */}
+{/* Content based on user role and active view */}
       {!loading && !error && (
         <>
-          {currentBetreuerData?.ROLLE === 'stationaer' && !isAdmin ? (
-            renderStationaerView()
-          ) : currentBetreuerData?.ROLLE === 'laufend' && !isAdmin ? (
-            renderLaufendView()
-          ) : (
+          {/* Bei Betreuer ohne Teams spezielle Nachricht anzeigen */}
+          {!isAdmin && currentBetreuerData && accessibleItems.teams.length === 0 && currentBetreuerData.ROLLE !== 'stationaer' && (
+            <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-xl p-8 shadow-sm border border-slate-100 dark:border-slate-700">
+              <User className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Keine Teams zugewiesen</h3>
+              <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-4">
+                Ihrem Konto wurden noch keine Teams zugewiesen. 
+                Bitte kontaktieren Sie einen Administrator, um Teams zugewiesen zu bekommen.
+              </p>
+              <button
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg inline-flex items-center"
+                onClick={() => navigate('/dashboard')}
+              >
+                Zurück zum Dashboard
+              </button>
+            </div>
+          )}
+
+          {/* Different views for different roles */}
+          {!isAdmin && currentBetreuerData && (
             <>
-              {/* Admin or no specific role - show all results */}
+              {/* Show role-specific views for betreuer */}
+              {currentBetreuerData.ROLLE === 'stationaer' ? (
+                renderStationaerView()
+              ) : currentBetreuerData.ROLLE === 'laufend' && accessibleItems.teams.length > 0 ? (
+                renderLaufendView()
+              ) : accessibleItems.teams.length > 0 ? (
+                renderLaufendView() // Default to team view if teams assigned
+              ) : currentBetreuerData.ROLLE === 'stationaer' ? (
+                <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-xl p-8 shadow-sm border border-slate-100 dark:border-slate-700">
+                  <MapPin className="w-12 h-12 text-blue-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Keine Disziplinen zugewiesen</h3>
+                  <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-4">
+                    Ihrem Konto wurden noch keine Disziplinen zugewiesen. 
+                    Bitte kontaktieren Sie einen Administrator für weitere Unterstützung.
+                  </p>
+                  <button
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg inline-flex items-center"
+                    onClick={() => navigate('/dashboard')}
+                  >
+                    Zurück zum Dashboard
+                  </button>
+                </div>
+              ) : null
+              /* Die "Keine Teams" Nachricht wird schon oben gezeigt */
+              }
+            </>
+          )}
+          
+          {/* Admin view - shows all results in selected view mode */}
+          {(isAdmin || !currentBetreuerData) && (
+            <>
               {viewMode === 'card' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   <AnimatePresence>
@@ -1521,34 +1667,50 @@ const ErgebnissePage = () => {
                 </div>
                 <div className="p-4 max-h-96 overflow-y-auto">
                   <div className="space-y-2">
-                    {disziplinen.map((disziplin) => (
-                      <div 
-                        key={disziplin.DISZIPLINID}
-                        className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer transition-colors"
-                        onClick={() => {
-                          // Add a new score for this disziplin
-                          setFormData({
-                            ...formData,
-                            TEAMID: currentTeam.TEAMID,
-                            DISZIPLINID: disziplin.DISZIPLINID
-                          });
-                          setShowDisziplinSelectionModal(false);
-                          setShowAddModal(true);
-                          triggerHapticFeedback('selection');
-                        }}
-                      >
-                        <h4 className="font-medium text-gray-900 dark:text-white">{disziplin.NAME}</h4>
-                        {/* Show existing score if available */}
-                        {enhancedErgebnisse.some(e => e.TEAMID === currentTeam.TEAMID && e.DISZIPLINID === disziplin.DISZIPLINID) && (
-                          <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                            Bereits bewertet: 
-                            <span className="ml-1 text-green-600 dark:text-green-400 font-medium">
-                              {enhancedErgebnisse.find(e => e.TEAMID === currentTeam.TEAMID && e.DISZIPLINID === disziplin.DISZIPLINID)?.PUNKTE || 0} Punkte
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                    {disziplinen.map((disziplin) => {
+                      // Prüfen, ob dieses Ergebnis bereits existiert
+                      const existingResult = enhancedErgebnisse.find(e => 
+                        e.TEAMID === currentTeam.TEAMID && e.DISZIPLINID === disziplin.DISZIPLINID
+                      );
+                      
+                      return (
+                        <div 
+                          key={disziplin.DISZIPLINID}
+                          className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer transition-colors"
+                          onClick={() => {
+                            // Add a new score for this disziplin or edit existing one
+                            setFormData({
+                              ...formData,
+                              TEAMID: currentTeam.TEAMID,
+                              DISZIPLINID: disziplin.DISZIPLINID,
+                              PUNKTE: existingResult ? existingResult.PUNKTE : '',
+                              DATUM: existingResult ? existingResult.DATUM : new Date().toISOString().split('T')[0],
+                              KOMMENTAR: existingResult ? existingResult.KOMMENTAR : ''
+                            });
+                            setShowDisziplinSelectionModal(false);
+                            
+                            if (existingResult) {
+                              setCurrentErgebnis(existingResult);
+                              setShowEditModal(true);
+                            } else {
+                              setShowAddModal(true);
+                            }
+                            
+                            triggerHapticFeedback('selection');
+                          }}
+                        >
+                          <h4 className="font-medium text-gray-900 dark:text-white">{disziplin.NAME}</h4>
+                          {existingResult && (
+                            <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                              Bereits bewertet: 
+                              <span className="ml-1 text-green-600 dark:text-green-400 font-medium">
+                                {existingResult.PUNKTE || 0} Punkte
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
                 <div className="flex justify-end bg-gray-50 dark:bg-gray-700/50 p-4 rounded-b-lg">
