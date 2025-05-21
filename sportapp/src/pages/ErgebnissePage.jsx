@@ -34,6 +34,7 @@ import {
   Layers
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import * as XLSX from 'xlsx'; // Added for Excel export
 
 // Animation variants for page transition
 const pageVariants = {
@@ -108,6 +109,7 @@ const ErgebnissePage = () => {
   const [showTeamSelectionModal, setShowTeamSelectionModal] = useState(false);
   const [showDisziplinSelectionModal, setShowDisziplinSelectionModal] = useState(false);
   const [currentErgebnis, setCurrentErgebnis] = useState(null);
+  const [showExportFormatModal, setShowExportFormatModal] = useState(false); // State for export format modal
   
   // Form state
   const [formData, setFormData] = useState({
@@ -735,6 +737,113 @@ const accessibleItems = useMemo(() => {
     setSortOrder('desc');
   };
 
+  // Prepare data for export
+  const getDataForExport = () => {
+    return enhancedErgebnisse.map(ergebnis => ({
+      'Team': ergebnis.teamName,
+      'Disziplin': ergebnis.disziplinName,
+      'Punkte': ergebnis.punkteNumber,
+      'Datum': ergebnis.DATUM ? new Date(ergebnis.DATUM).toLocaleDateString('de-DE') : '-',
+      'Kommentar': ergebnis.KOMMENTAR || ''
+    }));
+  };
+
+  // Handle Excel export
+  const handleExportExcel = () => {
+    triggerHapticFeedback('light');
+    const dataToExport = getDataForExport();
+
+    if (!dataToExport || dataToExport.length === 0) {
+      setNotification({
+        type: 'error',
+        message: 'Keine Daten zum Exportieren vorhanden.'
+      });
+      triggerHapticFeedback('error');
+      setShowExportFormatModal(false);
+      return;
+    }
+
+    try {
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Ergebnisse');
+
+      const colWidths = Object.keys(dataToExport[0] || {}).map(key => {
+        const maxLength = Math.max(
+          key.length,
+          ...dataToExport.map(row => String(row[key] || '').length)
+        );
+        return { wch: maxLength + 2 };
+      });
+      worksheet['!cols'] = colWidths;
+
+      const today = new Date().toISOString().split('T')[0];
+      const fileName = `Ergebnisse_Export_${today}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+
+      setNotification({
+        type: 'success',
+        message: 'Ergebnisse erfolgreich als Excel exportiert!'
+      });
+      triggerHapticFeedback('success');
+    } catch (err) {
+      console.error('Error exporting to Excel:', err);
+      setNotification({
+        type: 'error',
+        message: `Fehler beim Exportieren nach Excel: ${err.message}`
+      });
+      triggerHapticFeedback('error');
+    }
+    setShowExportFormatModal(false);
+  };
+
+  // Handle CSV export
+  const handleExportCSV = () => {
+    triggerHapticFeedback('light');
+    const dataToExport = getDataForExport();
+
+    if (!dataToExport || dataToExport.length === 0) {
+      setNotification({
+        type: 'error',
+        message: 'Keine Daten zum Exportieren vorhanden.'
+      });
+      triggerHapticFeedback('error');
+      setShowExportFormatModal(false);
+      return;
+    }
+
+    try {
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+      const csvData = XLSX.utils.sheet_to_csv(worksheet);
+      
+      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      link.setAttribute('href', url);
+      const today = new Date().toISOString().split('T')[0];
+      link.setAttribute('download', `Ergebnisse_Export_${today}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setNotification({
+        type: 'success',
+        message: 'Ergebnisse erfolgreich als CSV exportiert!'
+      });
+      triggerHapticFeedback('success');
+    } catch (err) {
+      console.error('Error exporting to CSV:', err);
+      setNotification({
+        type: 'error',
+        message: `Fehler beim Exportieren nach CSV: ${err.message}`
+      });
+      triggerHapticFeedback('error');
+    }
+    setShowExportFormatModal(false);
+  };
+
   // Get role display text
   const getRoleDisplay = (betreuer) => {
     if (!betreuer) return { role: "Nicht zugewiesen", icon: null };
@@ -995,10 +1104,10 @@ const accessibleItems = useMemo(() => {
       <div className="mb-6">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2">Ergebnisse</h1>
         {currentBetreuerData && (
-          <div className="flex items-center text-slate-600 dark:text-slate-400 text-sm">
-            <User className="w-4 h-4 mr-1" />
-            <span>Angemeldet als {currentBetreuerData.NAME}</span>
-            <div className="flex items-center ml-4">
+          <div className="flex items-center text-slate-600 dark:text-slate-400 text-sm mb-1 flex-wrap"> {/* Added flex-wrap and mb-1 */}
+            <User className="w-4 h-4 mr-1 flex-shrink-0" /> {/* Added flex-shrink-0 */}
+            <span className="mr-4">Angemeldet als {currentBetreuerData.NAME}</span> {/* Added mr-4 for spacing */}
+            <div className="flex items-center">
               {getRoleDisplay(currentBetreuerData).icon}
               <span className="ml-1">{getRoleDisplay(currentBetreuerData).role}</span>
             </div>
@@ -1018,36 +1127,36 @@ const accessibleItems = useMemo(() => {
         <>
           {/* Admin UI with advanced filters */}
           {isAdmin ? (
-            <div className="mb-6 flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
-              <div className="relative flex-grow">
+            <div className="mb-6 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
+              <div className="relative flex-grow w-full sm:w-auto"> {/* Made search full width on small, auto on sm+ */}
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
                   placeholder="Nach Team oder Disziplin suchen..."
-                  className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  className="pl-10 pr-4 py-2.5 w-full border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-shadow" // Increased py, added focus rings
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
               
               {/* View mode selector */}
-              <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+              <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg self-start sm:self-center"> {/* Added self-start for col layout */}
                 <button
-                  className={`p-2 rounded ${viewMode === 'card' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+                  className={`p-2.5 rounded-md ${viewMode === 'card' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700/60'}`} // Increased padding, added hover for non-active
                   onClick={() => setViewMode('card')}
                   aria-label="Card view"
                 >
                   <Grid className="w-5 h-5" />
                 </button>
                 <button
-                  className={`p-2 rounded ${viewMode === 'table' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+                  className={`p-2.5 rounded-md ${viewMode === 'table' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700/60'}`} // Increased padding, added hover for non-active
                   onClick={() => setViewMode('table')}
                   aria-label="Table view"
                 >
                   <List className="w-5 h-5" />
                 </button>
                 <button
-                  className={`p-2 rounded ${viewMode === 'chart' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+                  className={`p-2.5 rounded-md ${viewMode === 'chart' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700/60'}`} // Increased padding, added hover for non-active
                   onClick={() => setViewMode('chart')}
                   aria-label="Chart view"
                 >
@@ -1056,9 +1165,9 @@ const accessibleItems = useMemo(() => {
               </div>
               
               {/* Team selector */}
-              <div className="relative">
+              <div className="relative w-full sm:w-auto"> {/* Full width on small, auto on sm+ */}
                 <select
-                  className="pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 appearance-none"
+                  className="pl-4 pr-10 py-2.5 w-full border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 appearance-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-shadow" // Increased py, added focus rings
                   value={selectedTeam}
                   onChange={(e) => setSelectedTeam(e.target.value)}
                 >
@@ -1071,9 +1180,9 @@ const accessibleItems = useMemo(() => {
               </div>
               
               {/* Disziplin selector */}
-              <div className="relative">
+              <div className="relative w-full sm:w-auto"> {/* Full width on small, auto on sm+ */}
                 <select
-                  className="pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 appearance-none"
+                  className="pl-4 pr-10 py-2.5 w-full border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 appearance-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-shadow" // Increased py, added focus rings
                   value={selectedDisziplin}
                   onChange={(e) => setSelectedDisziplin(e.target.value)}
                 >
@@ -1087,7 +1196,7 @@ const accessibleItems = useMemo(() => {
               
               {/* Reset filters button */}
               <button
-                className="flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                className="flex items-center justify-center px-4 py-2.5 w-full sm:w-auto border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" // Increased py, added hover
                 onClick={resetFilters}
               >
                 <RefreshCw className="w-4 h-4 mr-2" />
@@ -1095,16 +1204,30 @@ const accessibleItems = useMemo(() => {
               </button>
               
               {/* Add result button */}
-              <button
-                className="flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg ml-auto"
-                onClick={() => {
-                  openAddModal();
-                  triggerHapticFeedback('light');
-                }}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Ergebnis hinzufügen
-              </button>
+              <div className="w-full sm:w-auto sm:ml-auto flex flex-col sm:flex-row gap-3"> {/* Container for buttons to be on new line on small, then row */}
+                <button
+                  className="flex items-center justify-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors w-full sm:w-auto" // Increased py, responsive width
+                  onClick={() => {
+                    openAddModal();
+                    triggerHapticFeedback('light');
+                  }}
+                >
+                  <Plus className="w-5 h-5 mr-2" /> {/* Increased icon size */}
+                  Ergebnis hinzufügen
+                </button>
+                
+                {/* Export to Excel button -> Opens Format Selection Modal */}
+                <button
+                  className="flex items-center justify-center px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto" // Increased py, responsive width
+                  onClick={() => {
+                    setShowExportFormatModal(true);
+                    triggerHapticFeedback('light');
+                  }}
+                >
+                  <FileText className="w-5 h-5 mr-2" /> {/* Increased icon size */}
+                  Daten exportieren
+                </button>
+              </div>
             </div>
           ) : (
             /* Betreuer UI: Steuerleiste nur für stationäre Betreuer anzeigen */
@@ -1958,6 +2081,68 @@ const accessibleItems = useMemo(() => {
                     type="button"
                     className="px-6 py-2 rounded-lg text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-semibold"
                     onClick={() => setShowDisziplinSelectionModal(false)}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+      
+      {/* Export Format Selection Modal */}
+      <AnimatePresence>
+        {showExportFormatModal && (
+          <>
+            <motion.div
+              className="fixed inset-0 bg-black bg-opacity-50 z-40"
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              variants={backdropVariants}
+              onClick={() => setShowExportFormatModal(false)}
+            ></motion.div>
+            <motion.div
+              className="fixed inset-0 flex items-center justify-center z-50 p-4"
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              variants={modalVariants}
+            >
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-sm w-full">
+                <div className="flex justify-between items-center border-b dark:border-gray-700 p-4">
+                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Exportformat wählen</h3>
+                  <button
+                    onClick={() => setShowExportFormatModal(false)}
+                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="p-6 space-y-4">
+                  <button
+                    type="button"
+                    className="w-full px-4 py-3 text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center text-lg"
+                    onClick={handleExportExcel}
+                  >
+                    <FileText className="w-5 h-5 mr-2" />
+                    Als Excel (.xlsx) exportieren
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full px-4 py-3 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center text-lg"
+                    onClick={handleExportCSV}
+                  >
+                    <Layers className="w-5 h-5 mr-2" /> {/* Using Layers as a generic file icon for CSV */}
+                    Als CSV (.csv) exportieren
+                  </button>
+                </div>
+                <div className="flex justify-end bg-gray-50 dark:bg-gray-700/50 p-4 rounded-b-lg">
+                  <button
+                    type="button"
+                    className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                    onClick={() => setShowExportFormatModal(false)}
                   >
                     Abbrechen
                   </button>

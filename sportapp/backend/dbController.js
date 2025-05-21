@@ -1792,6 +1792,86 @@ const StationController = {
 
 
 
+// ZEITPLAN table operations
+const ZeitplanController = {
+  // Get all zeitplan entries, ordered by start time
+  getAll: async () => {
+    return await executeQuery('SELECT z.*, t.NAME as TEAM_NAME, d.NAME as DISZIPLIN_NAME FROM ZEITPLAN z JOIN TEAM t ON z.TEAMID = t.TEAMID JOIN DISZIPLIN d ON z.DISZIPLINID = d.DISZIPLINID ORDER BY z.STARTZEIT, t.NAME');
+  },
+
+  // Get zeitplan entries by Team ID
+  getByTeamId: async (teamId) => {
+    return await executeQuery(
+      'SELECT z.*, t.NAME as TEAM_NAME, d.NAME as DISZIPLIN_NAME FROM ZEITPLAN z JOIN TEAM t ON z.TEAMID = t.TEAMID JOIN DISZIPLIN d ON z.DISZIPLINID = d.DISZIPLINID WHERE z.TEAMID = :teamId ORDER BY z.STARTZEIT',
+      [teamId]
+    );
+  },
+
+  // Delete all zeitplan entries (useful before a new import)
+  deleteAll: async () => {
+    console.log('Deleting all Zeitplan entries');
+    return await executeQuery('DELETE FROM ZEITPLAN', [], { autoCommit: true });
+  },
+
+  // Create multiple zeitplan entries (for bulk import)
+  createBulk: async (entries) => {
+    let connection;
+    console.log(`Starting bulk insert for ${entries.length} zeitplan entries.`);
+
+    try {
+      connection = await oracledb.getConnection('appPool');
+      await connection.execute('ALTER SEQUENCE zeitplan_seq RESTART'); // Reset sequence for clean import if needed, or manage IDs differently
+
+      const insertQuery = `
+        INSERT INTO ZEITPLAN (TEAMID, DISZIPLINID, STARTZEIT, ENDEZEIT, ORT, NOTIZ)
+        VALUES (:teamId, :disziplinId, TO_TIMESTAMP(:startzeit, 'YYYY-MM-DD HH24:MI:SS'), TO_TIMESTAMP(:endezeit, 'YYYY-MM-DD HH24:MI:SS'), :ort, :notiz)
+      `;
+      
+      // Prepare data for batch execution
+      // Ensure date strings are correctly formatted as 'YYYY-MM-DD HH24:MI:SS'
+      const bindDefs = [
+        { type: oracledb.NUMBER },       // teamId
+        { type: oracledb.NUMBER },       // disziplinId
+        { type: oracledb.STRING },       // startzeit (as string 'YYYY-MM-DD HH24:MI:SS')
+        { type: oracledb.STRING },       // endezeit (as string 'YYYY-MM-DD HH24:MI:SS')
+        { type: oracledb.STRING, maxSize: 255 }, // ort
+        { type: oracledb.STRING, maxSize: 1000 } // notiz
+      ];
+
+      const dataToInsert = entries.map(entry => [
+        entry.TEAMID,
+        entry.DISZIPLINID,
+        entry.STARTZEIT, // Must be 'YYYY-MM-DD HH24:MI:SS' string
+        entry.ENDEZEIT,   // Must be 'YYYY-MM-DD HH24:MI:SS' string
+        entry.ORT || null,
+        entry.NOTIZ || null
+      ]);
+      
+      console.log('Sample data to insert (first entry):', dataToInsert[0]);
+
+      const result = await connection.executeMany(insertQuery, dataToInsert, { 
+        autoCommit: true,
+        bindDefs: bindDefs
+      });
+      
+      console.log(`Bulk insert result: ${result.rowsAffected} rows affected.`);
+      return { success: true, rowsAffected: result.rowsAffected };
+    } catch (err) {
+      console.error('Error in createBulk Zeitplan:', err);
+      return { success: false, error: err.message };
+    } finally {
+      if (connection) {
+        try {
+          await connection.close();
+        } catch (err) {
+          console.error('Error closing connection in createBulk Zeitplan:', err);
+        }
+      }
+    }
+  }
+};
+
+
 // Get table schema information
 async function getTableSchema(tableName) {
   return await executeQuery(
@@ -1812,6 +1892,7 @@ module.exports = {
   DisziplinController,
   ErgebnisController,
   getTableSchema,
-  SchuelerController: schuelerController, // Change this line (or rename the controller itself)
-  StationController
+  SchuelerController: schuelerController,
+  StationController,
+  ZeitplanController
 };

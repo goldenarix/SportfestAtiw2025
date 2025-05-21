@@ -1,6 +1,8 @@
 // routes.js - Konsolidierte Routen-Definitionen
 const express = require('express');
 const router = express.Router();
+const multer = require('multer'); // For file uploads
+const xlsx = require('xlsx'); // For Excel parsing
 const {
   BetreuerController,
   TeamController,
@@ -8,6 +10,7 @@ const {
   ErgebnisController,
   SchuelerController,
   StationController,
+  ZeitplanController, // Ensure ZeitplanController is imported
   getTableSchema
 } = require('./dbController');
 
@@ -15,6 +18,188 @@ const authController = require('./authController');
 // Middleware zur Fehlerbehandlung
 const asyncHandler = fn => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
+
+// Multer setup for in-memory file storage
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
+// ===== ZEITPLAN-ROUTEN =====
+
+// Alle Zeitplan-Einträge abrufen
+router.get('/zeitplan', asyncHandler(async (req, res) => {
+  const result = await ZeitplanController.getAll();
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(500).json({ success: false, error: result.error || 'Fehler beim Abrufen des Zeitplans' });
+  }
+}));
+
+// Zeitplan-Einträge für ein bestimmtes Team abrufen
+router.get('/zeitplan/team/:teamId', asyncHandler(async (req, res) => {
+  const teamId = parseInt(req.params.teamId, 10);
+  if (isNaN(teamId)) {
+    return res.status(400).json({ success: false, error: 'Ungültige Team ID' });
+  }
+  const result = await ZeitplanController.getByTeamId(teamId);
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(500).json({ success: false, error: result.error || 'Fehler beim Abrufen des Zeitplans für das Team' });
+  }
+}));
+
+// Zeitplan aus Excel-Datei importieren (nur für Admins)
+router.post('/zeitplan/import',
+  authController.authenticateToken,
+  authController.requireAdmin,
+  upload.single('zeitplanFile'), // 'zeitplanFile' should be the name attribute of your file input
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'Keine Datei hochgeladen' });
+    }
+
+    try {
+      // 1. Fetch Teams and Disciplines for Name-to-ID mapping
+      const teamsResult = await TeamController.getAll();
+      const disziplinsResult = await DisziplinController.getAll();
+
+      if (!teamsResult.success || !disziplinsResult.success) {
+        return res.status(500).json({ success: false, error: 'Fehler beim Abrufen von Team- oder Disziplindaten für den Import' });
+      }
+
+      const teamsMap = new Map(teamsResult.data.map(team => [team.NAME.toLowerCase(), team.TEAMID]));
+      const disziplinsMap = new Map(disziplinsResult.data.map(d => [d.NAME.toLowerCase(), d.DISZIPLINID]));
+
+      // 2. Parse Excel
+      const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const jsonData = xlsx.utils.sheet_to_json(sheet, { header: 1 }); // header:1 to get array of arrays
+
+      if (jsonData.length < 2) { // Header + at least one data row
+        return res.status(400).json({ success: false, error: 'Die Excel-Datei ist leer oder hat kein gültiges Format.' });
+      }
+      
+      const headerRow = jsonData[0].map(h => String(h).trim().toLowerCase());
+      const expectedHeaders = ['team name', 'discipline name', 'start time', 'duration (minutes)'];
+      const optionalHeaders = ['location', 'notes'];
+
+      // Validate headers (simple check, can be more robust)
+      const requiredHeaderCheck = expectedHeaders.every(eh => headerRow.includes(eh));
+      if (!requiredHeaderCheck) {
+          return res.status(400).json({ success: false, error: `Fehlende Spaltenüberschriften. Erwartet: ${expectedHeaders.join(', ')}`});
+      }
+
+      // Get column indices
+      const teamNameIndex = headerRow.indexOf('team name');
+      const disciplineNameIndex = headerRow.indexOf('discipline name');
+      const startTimeIndex = headerRow.indexOf('start time');
+      const durationIndex = headerRow.indexOf('duration (minutes)');
+      const locationIndex = headerRow.indexOf('location');
+      const notesIndex = headerRow.indexOf('notes');
+
+      const entries = [];
+      const importDate = new Date(); // Assuming Sportfest is today
+      const year = importDate.getFullYear();
+      const month = String(importDate.getMonth() + 1).padStart(2, '0');
+      const day = String(importDate.getDate()).padStart(2, '0');
+      const sportfestDateStr = `${year}-${month}-${day}`;
+
+      for (let i = 1; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        if (row.length === 0 || row.every(cell => cell === null || String(cell).trim() === '')) continue; // Skip empty rows
+
+        const teamName = String(row[teamNameIndex] || '').trim();
+        const disciplineName = String(row[disciplineNameIndex] || '').trim();
+        const startTimeStr = String(row[startTimeIndex] || '').trim(); // e.g., "09:00" or 0.375 for Excel time
+        const durationMinutes = parseInt(row[durationIndex], 10);
+        
+        const location = (locationIndex !== -1 && row[locationIndex]) ? String(row[locationIndex]).trim() : null;
+        const notes = (notesIndex !== -1 && row[notesIndex]) ? String(row[notesIndex]).trim() : null;
+
+        if (!teamName || !disciplineName || !startTimeStr || isNaN(durationMinutes)) {
+          console.warn(`Zeile ${i + 1} übersprungen: Unvollständige Pflichtdaten - Team: '${teamName}', Disziplin: '${disciplineName}', Start: '${startTimeStr}', Dauer: ${row[durationIndex]}`);
+          continue;
+        }
+
+        const TEAMID = teamsMap.get(teamName.toLowerCase());
+        const DISZIPLINID = disziplinsMap.get(disciplineName.toLowerCase());
+
+        if (!TEAMID) {
+          console.warn(`Zeile ${i + 1} übersprungen: Team "${teamName}" nicht gefunden.`);
+          continue;
+        }
+        if (!DISZIPLINID) {
+          console.warn(`Zeile ${i + 1} übersprungen: Disziplin "${disciplineName}" nicht gefunden.`);
+          continue;
+        }
+        
+        let hours, minutes;
+        if (typeof row[startTimeIndex] === 'number' && row[startTimeIndex] < 1) { // Excel time value (fraction of a day)
+            const excelTime = row[startTimeIndex];
+            const totalMinutes = Math.round(excelTime * 24 * 60);
+            hours = Math.floor(totalMinutes / 60);
+            minutes = totalMinutes % 60;
+        } else if (typeof startTimeStr === 'string' && startTimeStr.includes(':')) { // "HH:mm" string
+            [hours, minutes] = startTimeStr.split(':').map(Number);
+        } else {
+            console.warn(`Zeile ${i + 1} übersprungen: Ungültiges Startzeitformat "${startTimeStr}". Erwartet "HH:mm" oder Excel-Zeitwert.`);
+            continue;
+        }
+
+        if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+            console.warn(`Zeile ${i + 1} übersprungen: Ungültige Startzeitwerte nach Parse "${startTimeStr}".`);
+            continue;
+        }
+
+        const startDate = new Date(importDate.getFullYear(), importDate.getMonth(), importDate.getDate(), hours, minutes, 0);
+        const endDate = new Date(startDate.getTime() + durationMinutes * 60000);
+
+        const formatDateTime = (dateObj) => {
+          const YYYY = dateObj.getFullYear();
+          const MM = String(dateObj.getMonth() + 1).padStart(2, '0');
+          const DD = String(dateObj.getDate()).padStart(2, '0');
+          const HH = String(dateObj.getHours()).padStart(2, '0');
+          const MIN = String(dateObj.getMinutes()).padStart(2, '0');
+          const SS = String(dateObj.getSeconds()).padStart(2, '0');
+          return `${YYYY}-${MM}-${DD} ${HH}:${MIN}:${SS}`;
+        };
+        
+        entries.push({
+          TEAMID,
+          DISZIPLINID,
+          STARTZEIT: formatDateTime(startDate),
+          ENDEZEIT: formatDateTime(endDate),
+          ORT: location,
+          NOTIZ: notes
+        });
+      }
+
+      if (entries.length === 0) {
+        return res.status(400).json({ success: false, error: 'Keine gültigen Einträge in der Excel-Datei gefunden oder alle Zeilen hatten Fehler.' });
+      }
+
+      // 3. Delete existing Zeitplan entries
+      const deleteResult = await ZeitplanController.deleteAll();
+      if (!deleteResult.success) {
+        return res.status(500).json({ success: false, error: 'Fehler beim Löschen des alten Zeitplans: ' + deleteResult.error });
+      }
+
+      // 4. Bulk insert new entries
+      const importResult = await ZeitplanController.createBulk(entries);
+      if (importResult.success) {
+        res.json({ success: true, message: `${importResult.rowsAffected} Zeitplan-Einträge erfolgreich importiert.` });
+      } else {
+        res.status(500).json({ success: false, error: 'Fehler beim Importieren des Zeitplans: ' + importResult.error });
+      }
+
+    } catch (error) {
+      console.error('Fehler beim Zeitplan-Import:', error);
+      res.status(500).json({ success: false, error: 'Serverfehler beim Import: ' + error.message });
+    }
+  })
+);
 
 // ===== SCHÜLER-ROUTEN =====
 // Alle Schüler abrufen
@@ -780,7 +965,5 @@ router.get('/schema/:tableName', asyncHandler(async (req, res) => {
     res.status(500).json(result);
   }
 }));
-
-
 
 module.exports = router;

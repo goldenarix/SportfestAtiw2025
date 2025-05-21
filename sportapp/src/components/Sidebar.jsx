@@ -14,7 +14,8 @@ import {
   Zap,
   Trophy,
   Target,
-  UserCog
+  UserCog,
+  Clock
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -127,6 +128,7 @@ const UltraModernSidebar = ({ darkMode, toggleDarkMode, isMobile, mobileOpen, se
     { icon: <Users size={20} />, title: 'Teilnehmer', link: '/participants' },
     { icon: <Target size={20} />, title: 'Disziplinen', link: '/disziplinen' },
     { icon: <Trophy size={20} />, title: 'Ergebnisse', link: '/ergebnisse' },
+    { icon: <Clock size={20} />, title: 'Zeitplan', link: '/zeitplan' },
     { icon: <Settings size={20} />, title: 'Einstellungen', link: '/settings' },
   ];
   

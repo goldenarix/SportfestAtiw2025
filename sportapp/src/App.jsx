@@ -27,6 +27,7 @@ const UserManagementPage = lazy(() => import('./pages/UserManagementPage'));
 const SelectTeamForDisciplinePage = lazy(() => import('./pages/SelectTeamForDisciplinePage'));
 const SelectDisciplineForTeamPage = lazy(() => import('./pages/SelectDisciplineForTeamPage'));
 const ScoreEntryForSelectionPage = lazy(() => import('./pages/ScoreEntryForSelectionPage'));
+const ZeitplanPage = lazy(() => import('./pages/ZeitplanPage'));
 
 // Loading component
 const PageLoader = () => (
@@ -142,6 +143,15 @@ const AnimatedRoutes = () => {
           <Route path="ergebnisse/team/:teamId/disziplin/:disziplinId/punkte" element={
             <Suspense fallback={<PageLoader />}>
               <ScoreEntryForSelectionPage />
+            </Suspense>
+          } />
+          
+          {/* Zeitplan Route */}
+          <Route path="zeitplan" element={
+            <Suspense fallback={<PageLoader />}>
+              <ProtectedRoute>
+                <ZeitplanPage />
+              </ProtectedRoute>
             </Suspense>
           } />
           
