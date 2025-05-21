@@ -17,6 +17,7 @@
     "framer-motion": "^12.5.0",
     "grid": "^4.10.8",
     "lucide-react": "^0.483.0",
+    "multer": "^2.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.4.0",
