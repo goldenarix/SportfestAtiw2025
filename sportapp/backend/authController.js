@@ -172,13 +172,14 @@ const loginAdmin = async (req, res) => {
 
 // Register a new Betreuer account
 const registerBetreuer = async (req, res) => {
-  const { name, password } = req.body;
+  const { name, password, rolle, disziplinen, teams } = req.body;
   
   if (!name || !password) {
-    return res.status(400).json({ 
-      success: false, 
-      error: 'Name und Passwort werden benötigt' 
-    });
+    return res.status(400).json({ success: false, error: 'Name und Passwort sind erforderlich' });
+  }
+  
+  if (rolle && !['stationaer', 'laufend'].includes(rolle)) {
+    return res.status(400).json({ success: false, error: 'Ungültige Rolle. Erlaubt sind \'stationaer\' oder \'laufend\'.' });
   }
   
   try {
@@ -203,7 +204,10 @@ const registerBetreuer = async (req, res) => {
     
     const createResult = await BetreuerController.create({
       NAME: name,
-      PASSWORT: hashedPassword
+      PASSWORT: hashedPassword,
+      ROLLE: rolle || 'stationaer', // Default to 'stationaer' if not provided
+      disziplinen: rolle === 'stationaer' ? disziplinen : undefined, 
+      teams: rolle === 'laufend' ? teams : undefined
     });
     
     if (!createResult.success) {

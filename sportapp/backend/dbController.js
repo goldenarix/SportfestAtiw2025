@@ -236,6 +236,13 @@ const BetreuerController = {
     try {
       console.log('Creating new Betreuer with data:', betreuer);
       
+      // NEU: Prüfe, ob bereits ein Betreuer mit diesem Namen existiert
+      const existingBetreuer = await BetreuerController.getByName(betreuer.NAME || betreuer.name);
+      if (existingBetreuer.success && existingBetreuer.data && existingBetreuer.data.length > 0) {
+        console.warn(`Betreuer mit Name '${betreuer.NAME || betreuer.name}' existiert bereits.`);
+        return { success: false, error: `Ein Betreuer mit dem Namen '${betreuer.NAME || betreuer.name}' existiert bereits.` };
+      }
+      
       // Get connection directly for better control
       connection = await oracledb.getConnection('appPool');
       
@@ -332,6 +339,19 @@ const BetreuerController = {
       
       // Start transaction
       await connection.execute('SET TRANSACTION READ WRITE');
+
+      // NEU: Hole die aktuelle Rolle des Betreuers, bevor Änderungen vorgenommen werden
+      let oldRole = null;
+      if (betreuer.ROLLE !== undefined || betreuer.rolle !== undefined) {
+        const betreuerVorUpdate = await connection.execute(
+          'SELECT ROLLE FROM Betreuer WHERE BETREUERID = :id',
+          [id],
+          { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        if (betreuerVorUpdate.rows.length > 0) {
+          oldRole = betreuerVorUpdate.rows[0].ROLLE;
+        }
+      }
       
       // Build dynamic SET clause based on provided fields
       let setClauses = [];
@@ -363,56 +383,97 @@ const BetreuerController = {
         const updateResult = await connection.execute(
           query,
           binds,
-          { autoCommit: false }
+          { autoCommit: false } // Wichtig: autoCommit hier auf false lassen für Transaktion
         );
         
         console.log('Update result:', updateResult);
       }
       
+      // NEU: Logik zum Aufräumen alter Zuweisungen bei Rollenwechsel
+      const newRole = betreuer.ROLLE || betreuer.rolle;
+      if (oldRole && newRole && oldRole !== newRole) {
+        console.log(`Rollenwechsel von ${oldRole} zu ${newRole} für Betreuer ${id}. Alte Zuweisungen werden gelöscht.`);
+        if (oldRole === 'stationaer') { // War stationaer, wird etwas anderes (laufend)
+          await connection.execute(
+            'DELETE FROM BETREUER_DISZIPLIN WHERE BETREUERID = :id',
+            [id],
+            { autoCommit: false }
+          );
+          console.log(`Gelöschte BETREUER_DISZIPLIN Zuweisungen für Betreuer ${id} wegen Rollenwechsel.`);
+        } else if (oldRole === 'laufend') { // War laufend, wird etwas anderes (stationaer)
+          await connection.execute(
+            'DELETE FROM BETREUER_TEAM WHERE BETREUERID = :id',
+            [id],
+            { autoCommit: false }
+          );
+          console.log(`Gelöschte BETREUER_TEAM Zuweisungen für Betreuer ${id} wegen Rollenwechsel.`);
+        }
+      }
+      
       // Handle disziplinen assignment if provided
       if (betreuer.disziplinen !== undefined && Array.isArray(betreuer.disziplinen)) {
-        // First delete existing associations
-        await connection.execute(
-          'DELETE FROM BETREUER_DISZIPLIN WHERE BETREUERID = :id',
-          [id],
-          { autoCommit: false }
-        );
-        
-        // Then insert new associations
-        if (betreuer.disziplinen.length > 0) {
-          await Promise.all(betreuer.disziplinen.map(disziplinId => 
-            connection.execute(
-              'INSERT INTO BETREUER_DISZIPLIN (BETREUERID, DISZIPLINID) VALUES (:betreuerid, :disziplinid)',
-              { betreuerid: id, disziplinid: disziplinId },
-              { autoCommit: false }
-            )
-          ));
+        // First delete existing associations (wird jetzt oben behandelt, wenn Rolle wechselt,
+        // aber hier beibehalten, falls Rolle gleich bleibt und nur Disziplinen geändert werden)
+        // Nur löschen, wenn die Rolle 'stationaer' ist oder wird
+        if (newRole === 'stationaer' || (!newRole && oldRole === 'stationaer')) {
+          await connection.execute(
+            'DELETE FROM BETREUER_DISZIPLIN WHERE BETREUERID = :id',
+            [id],
+            { autoCommit: false }
+          );
+          
+          // Then insert new associations
+          if (betreuer.disziplinen.length > 0) {
+            await Promise.all(betreuer.disziplinen.map(disziplinId => 
+              connection.execute(
+                'INSERT INTO BETREUER_DISZIPLIN (BETREUERID, DISZIPLINID) VALUES (:betreuerid, :disziplinid)',
+                { betreuerid: id, disziplinid: disziplinId },
+                { autoCommit: false }
+              )
+            ));
+          }
+          console.log(`Updated disziplinen assignments for betreuer ${id}`);
+        } else if (newRole && newRole !== 'stationaer') {
+          console.log(`Betreuer ${id} ist nicht 'stationaer' (Rolle: ${newRole}). Disziplinzuweisungen werden ignoriert/gelöscht.`);
+           // Stelle sicher, dass keine Disziplinzuweisungen bestehen bleiben, wenn Rolle nicht stationaer ist
+           await connection.execute(
+            'DELETE FROM BETREUER_DISZIPLIN WHERE BETREUERID = :id',
+            [id],
+            { autoCommit: false }
+          );
         }
-        
-        console.log(`Updated disziplinen assignments for betreuer ${id}`);
       }
       
       // Handle teams assignment if provided
       if (betreuer.teams !== undefined && Array.isArray(betreuer.teams)) {
-        // First delete existing associations
-        await connection.execute(
-          'DELETE FROM BETREUER_TEAM WHERE BETREUERID = :id',
-          [id],
-          { autoCommit: false }
-        );
-        
-        // Then insert new associations
-        if (betreuer.teams.length > 0) {
-          await Promise.all(betreuer.teams.map(teamId => 
-            connection.execute(
-              'INSERT INTO BETREUER_TEAM (BETREUERID, TEAMID) VALUES (:betreuerid, :teamid)',
-              { betreuerid: id, teamid: teamId },
-              { autoCommit: false }
-            )
-          ));
+        // Nur löschen, wenn die Rolle 'laufend' ist oder wird
+        if (newRole === 'laufend' || (!newRole && oldRole === 'laufend')) {
+          await connection.execute(
+            'DELETE FROM BETREUER_TEAM WHERE BETREUERID = :id',
+            [id],
+            { autoCommit: false }
+          );
+          
+          // Then insert new associations
+          if (betreuer.teams.length > 0) {
+            await Promise.all(betreuer.teams.map(teamId => 
+              connection.execute(
+                'INSERT INTO BETREUER_TEAM (BETREUERID, TEAMID) VALUES (:betreuerid, :teamid)',
+                { betreuerid: id, teamid: teamId },
+                { autoCommit: false }
+              )
+            ));
+          }
+          console.log(`Updated team assignments for betreuer ${id}`);
+        } else if (newRole && newRole !== 'laufend') {
+           console.log(`Betreuer ${id} ist nicht 'laufend' (Rolle: ${newRole}). Teamzuweisungen werden ignoriert/gelöscht.`);
+            // Stelle sicher, dass keine Teamzuweisungen bestehen bleiben, wenn Rolle nicht laufend ist
+           await connection.execute(
+            'DELETE FROM BETREUER_TEAM WHERE BETREUERID = :id',
+            [id],
+            { autoCommit: false }
+          );
         }
-        
-        console.log(`Updated team assignments for betreuer ${id}`);
       }
       
       // Commit the transaction
@@ -568,20 +629,6 @@ const TeamController = {
       );
       
       console.log('Insert result:', insertResult);
-      
-      // 3. Add betreuer association if provided (uses new BETREUER_TEAM table)
-      if (team.BETREUERID) {
-        console.log('Adding betreuer association:', team.BETREUERID);
-        
-        await connection.execute(
-          'INSERT INTO BETREUER_TEAM (BETREUERID, TEAMID) VALUES (:betreuerid, :teamid)',
-          {
-            betreuerid: team.BETREUERID,
-            teamid: nextId
-          },
-          { autoCommit: true }
-        );
-      }
       
       return { 
         success: true, 
@@ -756,6 +803,84 @@ const TeamController = {
       }
       
       console.error('Error deleting Team:', err);
+      return { success: false, error: err.message };
+    } finally {
+      if (connection) {
+        try {
+          await connection.close();
+        } catch (err) {
+          console.error('Error closing connection:', err);
+        }
+      }
+    }
+  },
+  
+  // Assign a list of students to a team
+  assignStudentsToTeam: async (teamId, studentIds) => {
+    console.log(`Assigning students to team ${teamId}:`, studentIds);
+    let connection;
+
+    try {
+      connection = await oracledb.getConnection('appPool');
+      await connection.execute('SET TRANSACTION READ WRITE');
+
+      // 1. Detach all students currently assigned to this team BUT NOT in the new studentIds list
+      // We find students who are in the team (s.TEAMID = :teamId)
+      // but whose SCHUELERID is NOT IN the provided studentIds list.
+      // If studentIds is empty, all students are detached.
+      let detachQuery = 
+        'UPDATE SCHUELER ' +
+        'SET TEAMID = NULL ' +
+        'WHERE TEAMID = :currentTeamId';
+      const detachBinds = { currentTeamId: teamId };
+
+      if (studentIds && studentIds.length > 0) {
+        // Create placeholders for student IDs: :sid0, :sid1, ...
+        const studentIdPlaceholders = studentIds.map((_, index) => `:sid${index}`).join(',');
+        detachQuery += ` AND SCHUELERID NOT IN (${studentIdPlaceholders})`;
+        studentIds.forEach((id, index) => {
+          detachBinds[`sid${index}`] = id;
+        });
+      }
+      
+      console.log('Detach Query:', detachQuery);
+      console.log('Detach Binds:', detachBinds);
+      const detachResult = await connection.execute(detachQuery, detachBinds, { autoCommit: false });
+      console.log(`${detachResult.rowsAffected} students detached from team ${teamId}`);
+
+      // 2. Assign all students in the studentIds list to this team
+      if (studentIds && studentIds.length > 0) {
+        // Create placeholders for student IDs: :sid0, :sid1, ...
+        const studentIdPlaceholders = studentIds.map((_, index) => `:assign_sid${index}`).join(',');
+        const assignQuery = 
+          'UPDATE SCHUELER ' +
+          'SET TEAMID = :newTeamId ' +
+          'WHERE SCHUELERID IN (' + studentIdPlaceholders + ')';
+        const assignBinds = { newTeamId: teamId };
+        studentIds.forEach((id, index) => {
+          assignBinds[`assign_sid${index}`] = id;
+        });
+
+        console.log('Assign Query:', assignQuery);
+        console.log('Assign Binds:', assignBinds);
+        const assignResult = await connection.execute(assignQuery, assignBinds, { autoCommit: false });
+        console.log(`${assignResult.rowsAffected} students assigned/updated for team ${teamId}`);
+      } else {
+        console.log('No students to assign, as studentIds list is empty.');
+      }
+
+      await connection.commit();
+      return { success: true, message: 'Student assignments updated successfully.' };
+
+    } catch (err) {
+      if (connection) {
+        try {
+          await connection.rollback();
+        } catch (rollbackErr) {
+          console.error('Error during rollback:', rollbackErr);
+        }
+      }
+      console.error('Error assigning students to team:', err);
       return { success: false, error: err.message };
     } finally {
       if (connection) {

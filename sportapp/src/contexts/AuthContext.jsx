@@ -134,38 +134,45 @@ export const AuthProvider = ({ children }) => {
     console.log("🚪 AuthContext: User und Token entfernt.");
   };
 
-  // Register a new betreuer (admin only)
-  const registerBetreuer = async (name, password) => {
-    if (!token || !currentUser || currentUser.role !== 'admin') {
-      setError('Nur Administratoren können neue Betreuer registrieren');
-      return false;
-    }
-
+  // Updated to include rolle, disziplinen, and teams
+  const registerBetreuer = async (name, password, rolle, disziplinen, teams) => {
+    console.log("🔒 AuthContext: Registriere Betreuer - Name:", name, "Rolle:", rolle, "Disziplinen:", disziplinen, "Teams:", teams);
     setLoading(true);
-    setError(null);
-
     try {
+      const payload = {
+        name,
+        password,
+        rolle: rolle || 'stationaer', // Default rolle if not provided
+      };
+
+      if (payload.rolle === 'stationaer' && disziplinen) {
+        payload.disziplinen = disziplinen;
+      } else if (payload.rolle === 'laufend' && teams) {
+        payload.teams = teams;
+      }
+
+      console.log("🔒 AuthContext: Sende Payload für Betreuer Registrierung:", payload);
+
       const response = await fetch(`${API_URL}/auth/register/betreuer`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ name, password })
+        body: JSON.stringify(payload),
       });
-
+      
       const data = await response.json();
-
-      if (response.ok && data.success) {
-        return { success: true, id: data.id };
+      console.log("🔒 AuthContext: Antwort von Betreuer Registrierung:", data);
+      
+      if (data.success) {
+        // Optional: login the user directly after registration or refresh list
+        return { success: true, data: data.data };
       } else {
-        setError(data.error || 'Registrierung fehlgeschlagen');
-        return { success: false, error: data.error };
+        return { success: false, error: data.error || 'Registrierung fehlgeschlagen' };
       }
-    } catch (err) {
-      console.error('Registration error:', err);
-      setError('Verbindungsfehler bei der Registrierung');
-      return { success: false, error: 'Verbindungsfehler' };
+    } catch (error) {
+      console.error("🔒 AuthContext: Fehler bei Betreuer Registrierung:", error);
+      return { success: false, error: 'Netzwerkfehler oder Server nicht erreichbar' };
     } finally {
       setLoading(false);
     }
@@ -346,6 +353,34 @@ export const AuthProvider = ({ children }) => {
     return isAuthenticated() && currentUser.role === 'admin';
   };
 
+  // Function to update Betreuer details
+  const updateBetreuer = async (betreuerId, dataToUpdate) => {
+    console.log(`🔒 AuthContext: Aktualisiere Betreuer ${betreuerId} mit Daten:`, dataToUpdate);
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/betreuer/${betreuerId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`, // Make sure token is included
+        },
+        body: JSON.stringify(dataToUpdate),
+      });
+      const data = await response.json();
+      console.log("🔒 AuthContext: Antwort von Betreuer Update:", data);
+      if (data.success) {
+        return { success: true, data: data.data };
+      } else {
+        return { success: false, error: data.error || 'Update fehlgeschlagen' };
+      }
+    } catch (error) {
+      console.error("🔒 AuthContext: Fehler bei Betreuer Update:", error);
+      return { success: false, error: 'Netzwerkfehler oder Server nicht erreichbar beim Update' };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Provide auth context value
   const value = {
     currentUser,
@@ -360,7 +395,8 @@ export const AuthProvider = ({ children }) => {
     getAllBetreuer,
     getAllAdmins,
     changePassword,
-    deleteUser
+    deleteUser,
+    updateBetreuer
   };
 
   return (

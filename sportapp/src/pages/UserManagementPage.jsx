@@ -11,9 +11,11 @@ import {
   Search,
   AlertCircle,
   CheckCircle,
-  X
+  X,
+  Edit3
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataContext } from '../../backend/DataLoader';
 
 /**
  * User Management Page - Allows admins to manage both Betreuer and Admin accounts
@@ -28,12 +30,19 @@ const UserManagementPage = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('betreuer'); // 'betreuer' or 'admin'
   
+  // States for user form modal (add/edit)
+  const [showUserFormModal, setShowUserFormModal] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [currentUserData, setCurrentUserData] = useState(null);
+  
   // States for creating new users
-  const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [newUserType, setNewUserType] = useState('betreuer');
   const [newUserName, setNewUserName] = useState('');
   const [newUserUsername, setNewUserUsername] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState('stationaer');
+  const [selectedDisziplinen, setSelectedDisziplinen] = useState([]);
+  const [selectedTeams, setSelectedTeams] = useState([]);
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addUserError, setAddUserError] = useState(null);
@@ -55,8 +64,18 @@ const UserManagementPage = () => {
     registerBetreuer,
     registerAdmin,
     changePassword,
-    deleteUser
+    deleteUser,
+    updateBetreuer
   } = useAuth();
+  
+  // NEU: Get data from DataContext for Disziplinen and Teams
+  const { 
+    disziplins, 
+    teams, 
+    loading: dataLoading, 
+    error: dataError,
+    refetchData 
+  } = useDataContext();
   
   // Fetch users on component mount
   useEffect(() => {
@@ -101,16 +120,58 @@ const UserManagementPage = () => {
   
   // Filter users based on search term
   const filteredBetreuerUsers = betreuerUsers.filter(user => 
-    user.NAME.toLowerCase().includes(searchTerm.toLowerCase())
+    (user.NAME && user.NAME.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (user.ROLLE && user.ROLLE.toLowerCase().includes(searchTerm.toLowerCase()))
   );
   
   const filteredAdminUsers = adminUsers.filter(user => 
     user.NAME.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    user.USERNAME.toLowerCase().includes(searchTerm.toLowerCase())
+    (user.USERNAME && user.USERNAME.toLowerCase().includes(searchTerm.toLowerCase()))
   );
   
-  // Handle adding a new user
-  const handleAddUser = async (e) => {
+  // Handle opening the modal for adding a new user
+  const openAddUserModal = () => {
+    setEditMode(false);
+    setCurrentUserData(null);
+    setNewUserType('betreuer'); // Default to Betreuer
+    setNewUserName('');
+    setNewUserUsername(''); // Wird nur für Admins verwendet
+    setNewUserPassword('');
+    setNewUserRole('stationaer'); // Default Rolle für neuen Betreuer
+    setSelectedDisziplinen([]);
+    setSelectedTeams([]);
+    setAddUserError(null);
+    setSuccessMessage(null);
+    setShowUserFormModal(true);
+  };
+
+  // Handle opening the modal for editing an existing user (Betreuer for now)
+  const openEditUserModal = (user) => {
+    setEditMode(true);
+    setCurrentUserData(user);
+    setNewUserType(user.USERNAME ? 'admin' : 'betreuer'); // Bestimme Typ basierend auf Username Existenz
+    setNewUserName(user.NAME);
+    setNewUserUsername(user.USERNAME || '');
+    setNewUserPassword(''); // Passwort nicht vorbefüllen
+    
+    if (user.USERNAME) { // Admin
+      setNewUserRole(''); // Rolle nicht relevant für Admin in diesem Kontext
+      setSelectedDisziplinen([]);
+      setSelectedTeams([]);
+    } else { // Betreuer
+      setNewUserRole(user.ROLLE || 'stationaer');
+      // Annahme: user.zugewiesene_disziplinen/teams sind Arrays von IDs oder Objekten mit ID
+      setSelectedDisziplinen(user.zugewiesene_disziplinen?.map(d => typeof d === 'object' ? d.DISZIPLINID : d) || []);
+      setSelectedTeams(user.zugewiesene_teams?.map(t => typeof t === 'object' ? t.TEAMID : t) || []);
+    }
+    
+    setAddUserError(null);
+    setSuccessMessage(null);
+    setShowUserFormModal(true);
+  };
+  
+  // Handle submitting the user form (add or edit)
+  const handleUserFormSubmit = async (e) => {
     e.preventDefault();
     setAddUserError(null);
     setIsSubmitting(true);
@@ -123,12 +184,13 @@ const UserManagementPage = () => {
     }
     
     if (newUserType === 'admin' && !newUserUsername.trim()) {
-      setAddUserError('Benutzername ist erforderlich');
+      setAddUserError('Benutzername ist erforderlich für Admins');
       setIsSubmitting(false);
       return;
     }
     
-    if (!newUserPassword.trim() || newUserPassword.length < 6) {
+    // Passwort Validierung: Nur für neue User oder wenn Passwort geändert wird (im Edit Mode nicht zwingend)
+    if ((!editMode || (editMode && newUserPassword.trim())) && (!newUserPassword.trim() || newUserPassword.length < 6)) {
       setAddUserError('Passwort muss mindestens 6 Zeichen lang sein');
       setIsSubmitting(false);
       return;
@@ -138,116 +200,66 @@ const UserManagementPage = () => {
       let result;
       
       if (newUserType === 'betreuer') {
-        result = await registerBetreuer(newUserName, newUserPassword);
-      } else {
-        result = await registerAdmin(newUserName, newUserUsername, newUserPassword);
+        const betreuerData = {
+          NAME: newUserName,
+          ROLLE: newUserRole,
+          // Passwort nur senden, wenn es im Add-Modus ist oder im Edit-Modus geändert wurde
+          ...( (!editMode || (editMode && newUserPassword.trim())) && { PASSWORT: newUserPassword } ),
+          ...(newUserRole === 'stationaer' && { disziplinen: selectedDisziplinen }),
+          ...(newUserRole === 'laufend' && { teams: selectedTeams }),
+        };
+
+        if (editMode && currentUserData) {
+          console.log("Updating Betreuer with data:", betreuerData);
+          result = await updateBetreuer(currentUserData.BETREUERID, betreuerData);
+        } else {
+          // Add mode - password is required here and part of betreuerData
+          if (!newUserPassword.trim()) {
+             setAddUserError('Passwort ist erforderlich für neue Betreuer');
+             setIsSubmitting(false);
+             return;
+          }
+          console.log("Registering Betreuer with data:", betreuerData);
+          // Die registerBetreuer Funktion erwartet name, password, rolle, disziplinen, teams als separate Argumente
+          result = await registerBetreuer(
+            betreuerData.NAME, 
+            betreuerData.PASSWORT, // Sicherstellen, dass Passwort hier übergeben wird
+            betreuerData.ROLLE, 
+            betreuerData.disziplinen, 
+            betreuerData.teams
+          );
+        }
+      } else { // Admin User
+        if (editMode && currentUserData) {
+          // TODO: Implement admin update logic if needed beyond password change
+          // For now, admin edit might only involve password change via ChangePasswordModal
+          // Or, if general admin details update is needed, call an updateAdmin function.
+          // This part is a placeholder if general admin editing is needed here.
+          setSuccessMessage('Admin-Bearbeitung (außer Passwort) hier noch nicht implementiert.');
+          setIsSubmitting(false);
+          setTimeout(() => setShowUserFormModal(false), 1500);
+          return; 
+        } else { // Add Admin
+          result = await registerAdmin(newUserName, newUserUsername, newUserPassword);
+        }
       }
       
-      if (result.success) {
-        // Refresh user lists
+      if (result && result.success) {
         const entityType = newUserType === 'betreuer' ? 'Betreuer' : 'Administrator';
-        setSuccessMessage(`${entityType} wurde erfolgreich erstellt`);
+        setSuccessMessage(`${entityType} wurde erfolgreich ${editMode ? 'aktualisiert' : 'erstellt'}`);
         
-        // Reset form
-        setNewUserName('');
-        setNewUserUsername('');
-        setNewUserPassword('');
+        // Reset form state
+        if (!editMode) { // Nur im Add-Modus komplett zurücksetzen
+          setNewUserName('');
+          setNewUserUsername('');
+          setNewUserPassword('');
+          setNewUserRole('stationaer');
+          setSelectedDisziplinen([]);
+          setSelectedTeams([]);
+        }
         
         // Refresh the lists
         if (newUserType === 'betreuer') {
-          const result = await getAllBetreuer();
-          if (result.success) {
-            setBetreuerUsers(result.data);
-          }
-        } else {
-          const result = await getAllAdmins();
-          if (result.success) {
-            setAdminUsers(result.data);
-          }
-        }
-        
-        // Close modal after a brief delay so user can see success message
-        setTimeout(() => {
-          setShowAddUserModal(false);
-          setSuccessMessage(null);
-        }, 1500);
-      } else {
-        setAddUserError(result.error || 'Ein Fehler ist beim Erstellen des Benutzers aufgetreten');
-      }
-    } catch (err) {
-      console.error('Error adding user:', err);
-      setAddUserError('Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-  
-  // Handle changing a user's password
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    setPasswordError(null);
-    setIsSubmitting(true);
-    
-    // Validate inputs
-    if (!newPassword.trim() || newPassword.length < 6) {
-      setPasswordError('Passwort muss mindestens 6 Zeichen lang sein');
-      setIsSubmitting(false);
-      return;
-    }
-    
-    if (newPassword !== confirmPassword) {
-      setPasswordError('Passwörter stimmen nicht überein');
-      setIsSubmitting(false);
-      return;
-    }
-    
-    try {
-      const result = await changePassword(
-        selectedUser.ID || selectedUser.BETREUERID, 
-        newPassword,
-        selectedUser.USERNAME ? 'admin' : 'betreuer'
-      );
-      
-      if (result.success) {
-        setSuccessMessage('Passwort wurde erfolgreich geändert');
-        
-        // Reset form
-        setNewPassword('');
-        setConfirmPassword('');
-        
-        // Close modal after a brief delay
-        setTimeout(() => {
-          setShowPasswordChangeModal(false);
-          setSuccessMessage(null);
-          setSelectedUser(null);
-        }, 1500);
-      } else {
-        setPasswordError(result.error || 'Ein Fehler ist beim Ändern des Passworts aufgetreten');
-      }
-    } catch (err) {
-      console.error('Error changing password:', err);
-      setPasswordError('Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-  
-  // Handle deleting a user
-  const handleDeleteUser = async () => {
-    setIsSubmitting(true);
-    setError(null);
-    
-    try {
-      const userType = confirmDeleteUser.USERNAME ? 'admin' : 'betreuer';
-      const userId = confirmDeleteUser.ID || confirmDeleteUser.BETREUERID;
-      
-      const result = await deleteUser(userId, userType);
-      
-      if (result.success) {
-        setSuccessMessage(`${userType === 'admin' ? 'Administrator' : 'Betreuer'} wurde erfolgreich gelöscht`);
-        
-        // Refresh the lists
-        if (userType === 'betreuer') {
           const betreuerResult = await getAllBetreuer();
           if (betreuerResult.success) {
             setBetreuerUsers(betreuerResult.data);
@@ -259,192 +271,54 @@ const UserManagementPage = () => {
           }
         }
         
-        // Reset state
-        setConfirmDeleteUser(null);
-        
-        // Hide success message after delay
         setTimeout(() => {
+          setShowUserFormModal(false);
           setSuccessMessage(null);
-        }, 3000);
+          if (editMode) {
+            setCurrentUserData(null); // Reset currentUserData after edit
+            setEditMode(false);
+          }
+        }, 1500);
       } else {
-        setError(result.error || 'Ein Fehler ist beim Löschen des Benutzers aufgetreten');
+        setAddUserError(result?.error || `Ein Fehler ist beim ${editMode ? 'Aktualisieren' : 'Erstellen'} des Benutzers aufgetreten`);
       }
     } catch (err) {
-      console.error('Error deleting user:', err);
-      setError('Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.');
+      console.error(`Error ${editMode ? 'updating' : 'adding'} user:`, err);
+      setAddUserError('Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.');
     } finally {
       setIsSubmitting(false);
     }
   };
   
-  // Add User Modal
-  const AddUserModal = () => (
-    <div className="fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl">
-        <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-          <h3 className="text-xl font-medium text-slate-900 dark:text-white">
-            Neuen Benutzer anlegen
-          </h3>
-          <button 
-            onClick={() => setShowAddUserModal(false)}
-            className="text-slate-400 hover:text-slate-500 dark:hover:text-slate-300 transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
-        
-        <form onSubmit={handleAddUser} className="p-6">
-          {/* User type selection */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Benutzertyp
-            </label>
-            <div className="flex rounded-lg bg-slate-100 dark:bg-slate-700 p-1">
-              <button
-                type="button"
-                className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all flex-1 ${
-                  newUserType === 'betreuer'
-                    ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-                onClick={() => setNewUserType('betreuer')}
-              >
-                <User size={16} className="mr-2" />
-                Betreuer
-              </button>
-              
-              <button
-                type="button"
-                className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all flex-1 ${
-                  newUserType === 'admin'
-                    ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-                onClick={() => setNewUserType('admin')}
-              >
-                <Shield size={16} className="mr-2" />
-                Administrator
-              </button>
-            </div>
-          </div>
-          
-          {/* Name field */}
-          <div className="mb-4">
-            <label 
-              htmlFor="newUserName" 
-              className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
-            >
-              Name
-            </label>
-            <input
-              id="newUserName"
-              type="text"
-              value={newUserName}
-              onChange={(e) => setNewUserName(e.target.value)}
-              className="block w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent transition-colors"
-              placeholder="Vollständiger Name"
-              disabled={isSubmitting}
-              required
-            />
-          </div>
-          
-          {/* Username field - only for admin */}
-          {newUserType === 'admin' && (
-            <div className="mb-4">
-              <label 
-                htmlFor="newUserUsername" 
-                className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
-              >
-                Benutzername
-              </label>
-              <input
-                id="newUserUsername"
-                type="text"
-                value={newUserUsername}
-                onChange={(e) => setNewUserUsername(e.target.value)}
-                className="block w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent transition-colors"
-                placeholder="Eindeutiger Benutzername"
-                disabled={isSubmitting}
-                required
-              />
-            </div>
-          )}
-          
-          {/* Password field */}
-          <div className="mb-6">
-            <label 
-              htmlFor="newUserPassword" 
-              className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
-            >
-              Passwort
-            </label>
-            <div className="relative">
-              <input
-                id="newUserPassword"
-                type={showPassword ? "text" : "password"}
-                value={newUserPassword}
-                onChange={(e) => setNewUserPassword(e.target.value)}
-                className="block w-full px-3 py-2 pr-10 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent transition-colors"
-                placeholder="Mindestens 6 Zeichen"
-                disabled={isSubmitting}
-                required
-              />
-              <button
-                type="button"
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-500 dark:hover:text-slate-300"
-                onClick={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-          
-          {/* Error message */}
-          {addUserError && (
-            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start">
-              <AlertCircle size={18} className="text-red-500 dark:text-red-400 mt-0.5 mr-2 flex-shrink-0" />
-              <p className="text-sm text-red-600 dark:text-red-400">{addUserError}</p>
-            </div>
-          )}
-          
-          {/* Success message */}
-          {successMessage && (
-            <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-start">
-              <CheckCircle size={18} className="text-green-500 dark:text-green-400 mt-0.5 mr-2 flex-shrink-0" />
-              <p className="text-sm text-green-600 dark:text-green-400">{successMessage}</p>
-            </div>
-          )}
-          
-          {/* Submit and cancel buttons */}
-          <div className="flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={() => setShowAddUserModal(false)}
-              className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-              disabled={isSubmitting}
-            >
-              Abbrechen
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                  Speichern...
-                </>
-              ) : (
-                'Benutzer anlegen'
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-  
+  // Helper function to handle disziplin selection
+  const handleDisziplinSelect = (disziplinId) => {
+    setSelectedDisziplinen(prev => 
+      prev.includes(disziplinId) 
+        ? prev.filter(id => id !== disziplinId) 
+        : [...prev, disziplinId]
+    );
+  };
+
+  // Helper function to handle team selection
+  const handleTeamSelect = (teamId) => {
+    setSelectedTeams(prev =>
+      prev.includes(teamId)
+        ? prev.filter(id => id !== teamId)
+        : [...prev, teamId]
+    );
+  };
+
+  useEffect(() => {
+    // Wenn sich die Rolle im Edit-Modus ändert, Zuweisungen der "anderen" Art löschen
+    if (editMode && currentUserData && newUserType === 'betreuer') {
+      if (newUserRole === 'stationaer') {
+        setSelectedTeams([]);
+      } else if (newUserRole === 'laufend') {
+        setSelectedDisziplinen([]);
+      }
+    }
+  }, [newUserRole, editMode, currentUserData, newUserType]);
+
   // Change Password Modal
   const ChangePasswordModal = () => (
     <div className="fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
@@ -467,7 +341,7 @@ const UserManagementPage = () => {
           </button>
         </div>
         
-        <form onSubmit={handleChangePassword} className="p-6">
+        <form onSubmit={handleUserFormSubmit} className="p-6">
           <div className="mb-4">
             <div className="flex items-center justify-center w-16 h-16 mx-auto rounded-full bg-indigo-100 dark:bg-indigo-900/30 mb-4">
               <Key size={28} className="text-indigo-600 dark:text-indigo-400" />
@@ -626,7 +500,7 @@ const UserManagementPage = () => {
             </button>
             <button
               type="button"
-              onClick={handleDeleteUser}
+              onClick={handleUserFormSubmit}
               disabled={isSubmitting}
               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
             >
@@ -645,6 +519,304 @@ const UserManagementPage = () => {
     </div>
   );
   
+  // User Form Modal (for Add/Edit) - Umbenannt und erweitert
+  const UserFormModal = () => {
+    // Helper function to handle disziplin selection
+    const handleDisziplinSelect = (disziplinId) => {
+      setSelectedDisziplinen(prev => 
+        prev.includes(disziplinId) 
+          ? prev.filter(id => id !== disziplinId) 
+          : [...prev, disziplinId]
+      );
+    };
+
+    // Helper function to handle team selection
+    const handleTeamSelect = (teamId) => {
+      setSelectedTeams(prev =>
+        prev.includes(teamId)
+          ? prev.filter(id => id !== teamId)
+          : [...prev, teamId]
+      );
+    };
+
+    useEffect(() => {
+      // Wenn sich die Rolle im Edit-Modus ändert, Zuweisungen der "anderen" Art löschen
+      if (editMode && currentUserData && newUserType === 'betreuer') {
+        if (newUserRole === 'stationaer') {
+          setSelectedTeams([]);
+        } else if (newUserRole === 'laufend') {
+          setSelectedDisziplinen([]);
+        }
+      }
+    }, [newUserRole, editMode, currentUserData, newUserType]);
+
+
+    return (
+      <div className="fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl">
+          <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <h3 className="text-xl font-medium text-slate-900 dark:text-white">
+              {editMode ? 'Benutzer bearbeiten' : 'Neuen Benutzer anlegen'}
+            </h3>
+            <button 
+              onClick={() => {
+                setShowUserFormModal(false);
+                setEditMode(false);
+                setCurrentUserData(null);
+              }}
+              className="text-slate-400 hover:text-slate-500 dark:hover:text-slate-300 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
+          
+          <form onSubmit={handleUserFormSubmit} className="p-6">
+            {/* User type selection - nur im Add-Modus änderbar */}
+            {!editMode && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Benutzertyp
+                </label>
+                <div className="flex rounded-lg bg-slate-100 dark:bg-slate-700 p-1">
+                  <button
+                    type="button"
+                    className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all flex-1 ${
+                      newUserType === 'betreuer'
+                        ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                    onClick={() => setNewUserType('betreuer')}
+                    disabled={editMode}
+                  >
+                    <User size={16} className="mr-2" />
+                    Betreuer
+                  </button>
+                  
+                  <button
+                    type="button"
+                    className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all flex-1 ${
+                      newUserType === 'admin'
+                        ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                    onClick={() => setNewUserType('admin')}
+                    disabled={editMode}
+                  >
+                    <Shield size={16} className="mr-2" />
+                    Administrator
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {editMode && currentUserData && (
+                <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">
+                    Bearbeite: <span className="font-semibold">{currentUserData.NAME}</span> ({currentUserData.USERNAME ? 'Admin' : `Betreuer, ID: ${currentUserData.BETREUERID}`})
+                </p>
+            )}
+            
+            {/* Name field */}
+            <div className="mb-4">
+              <label 
+                htmlFor="newUserName" 
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
+              >
+                Name
+              </label>
+              <input
+                id="newUserName"
+                type="text"
+                value={newUserName}
+                onChange={(e) => setNewUserName(e.target.value)}
+                className="block w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent transition-colors"
+                placeholder="Vollständiger Name"
+                disabled={isSubmitting}
+                required
+              />
+            </div>
+            
+            {/* Username field - only for admin */}
+            {newUserType === 'admin' && (
+              <div className="mb-4">
+                <label 
+                  htmlFor="newUserUsername" 
+                  className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
+                >
+                  Benutzername
+                </label>
+                <input
+                  id="newUserUsername"
+                  type="text"
+                  value={newUserUsername}
+                  onChange={(e) => setNewUserUsername(e.target.value)}
+                  className="block w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent transition-colors"
+                  placeholder="Eindeutiger Benutzername"
+                  disabled={isSubmitting || (editMode && newUserType === 'admin')} // Benutzername nicht änderbar für existierende Admins
+                  required
+                />
+              </div>
+            )}
+
+            {/* Rolle field - only for betreuer */}
+            {newUserType === 'betreuer' && (
+              <div className="mb-4">
+                <label 
+                  htmlFor="newUserRole"
+                  className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
+                >
+                  Rolle (Betreuer)
+                </label>
+                <select
+                  id="newUserRole"
+                  value={newUserRole}
+                  onChange={(e) => setNewUserRole(e.target.value)}
+                  disabled={isSubmitting}
+                  className="block w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent transition-colors"
+                >
+                  <option value="stationaer">Stationär (Disziplinen zuweisen)</option>
+                  <option value="laufend">Laufend (Teams zuweisen)</option>
+                </select>
+              </div>
+            )}
+
+            {/* Disziplinen Multi-Select - only for stationaer betreuer */}
+            {newUserType === 'betreuer' && newUserRole === 'stationaer' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Disziplinen zuweisen (für stationäre Betreuer)
+                </label>
+                {dataLoading && <p className="text-sm text-slate-500 dark:text-slate-400">Lade Disziplinen...</p>}
+                {dataError && <p className="text-sm text-red-500 dark:text-red-400">Fehler beim Laden der Disziplinen.</p>}
+                {!dataLoading && !dataError && disziplins && disziplins.length > 0 ? (
+                  <div className="max-h-48 overflow-y-auto border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-slate-50 dark:bg-slate-700/30">
+                    {disziplins.map(d => (
+                      <label key={d.DISZIPLINID} className="flex items-center space-x-2 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-600/50 rounded-md cursor-pointer">
+                        <input 
+                          type="checkbox"
+                          checked={selectedDisziplinen.includes(d.DISZIPLINID)}
+                          onChange={() => handleDisziplinSelect(d.DISZIPLINID)}
+                          disabled={isSubmitting}
+                          className="form-checkbox h-4 w-4 text-indigo-600 dark:text-indigo-400 border-slate-300 dark:border-slate-500 rounded focus:ring-indigo-500 dark:focus:ring-indigo-400"
+                        />
+                        <span className="text-sm text-slate-700 dark:text-slate-300">{d.NAME}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  !dataLoading && <p className="text-sm text-slate-500 dark:text-slate-400">Keine Disziplinen verfügbar.</p>
+                )}
+              </div>
+            )}
+
+            {/* Teams Multi-Select - only for laufend betreuer */}
+            {newUserType === 'betreuer' && newUserRole === 'laufend' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Teams zuweisen (für laufende Betreuer)
+                </label>
+                {dataLoading && <p className="text-sm text-slate-500 dark:text-slate-400">Lade Teams...</p>}
+                {dataError && <p className="text-sm text-red-500 dark:text-red-400">Fehler beim Laden der Teams.</p>}
+                {!dataLoading && !dataError && teams && teams.length > 0 ? (
+                  <div className="max-h-48 overflow-y-auto border border-slate-300 dark:border-slate-600 rounded-lg p-2 bg-slate-50 dark:bg-slate-700/30">
+                    {teams.map(t => (
+                      <label key={t.TEAMID} className="flex items-center space-x-2 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-600/50 rounded-md cursor-pointer">
+                        <input 
+                          type="checkbox"
+                          checked={selectedTeams.includes(t.TEAMID)}
+                          onChange={() => handleTeamSelect(t.TEAMID)}
+                          disabled={isSubmitting}
+                          className="form-checkbox h-4 w-4 text-indigo-600 dark:text-indigo-400 border-slate-300 dark:border-slate-500 rounded focus:ring-indigo-500 dark:focus:ring-indigo-400"
+                        />
+                        <span className="text-sm text-slate-700 dark:text-slate-300">{t.NAME}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  !dataLoading && <p className="text-sm text-slate-500 dark:text-slate-400">Keine Teams verfügbar.</p>
+                )}
+              </div>
+            )}
+            
+            {/* Password field */}
+            <div className="mb-6">
+              <label 
+                htmlFor="newUserPassword" 
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
+              >
+                Passwort {editMode && '(leer lassen, um nicht zu ändern)'}
+              </label>
+              <div className="relative">
+                <input
+                  id="newUserPassword"
+                  type={showPassword ? "text" : "password"}
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                  className="block w-full px-3 py-2 pr-10 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent transition-colors"
+                  placeholder="Mindestens 6 Zeichen"
+                  disabled={isSubmitting}
+                  required
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-500 dark:hover:text-slate-300"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+            
+            {/* Error message */}
+            {addUserError && (
+              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start">
+                <AlertCircle size={18} className="text-red-500 dark:text-red-400 mt-0.5 mr-2 flex-shrink-0" />
+                <p className="text-sm text-red-600 dark:text-red-400">{addUserError}</p>
+              </div>
+            )}
+            
+            {/* Success message */}
+            {successMessage && (
+              <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-start">
+                <CheckCircle size={18} className="text-green-500 dark:text-green-400 mt-0.5 mr-2 flex-shrink-0" />
+                <p className="text-sm text-green-600 dark:text-green-400">{successMessage}</p>
+              </div>
+            )}
+            
+            {/* Submit and cancel buttons */}
+            <div className="flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUserFormModal(false);
+                  setEditMode(false);
+                  setCurrentUserData(null);
+                }}
+                className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                disabled={isSubmitting}
+              >
+                Abbrechen
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Speichern...
+                  </>
+                ) : (
+                  editMode ? 'Änderungen speichern' : 'Benutzer anlegen'
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+  
   // Main render
   return (
     <div className="container px-4 mx-auto py-8">
@@ -660,11 +832,7 @@ const UserManagementPage = () => {
         
         <button
           onClick={() => {
-            setShowAddUserModal(true);
-            setAddUserError(null);
-            setNewUserName('');
-            setNewUserUsername('');
-            setNewUserPassword('');
+            openAddUserModal();
           }}
           className="mt-4 md:mt-0 flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
         >
@@ -777,8 +945,7 @@ const UserManagementPage = () => {
             </p>
             <button
               onClick={() => {
-                setShowAddUserModal(true);
-                setNewUserType('betreuer');
+                openAddUserModal();
               }}
               className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
             >
@@ -797,8 +964,7 @@ const UserManagementPage = () => {
             </p>
             <button
               onClick={() => {
-                setShowAddUserModal(true);
-                setNewUserType('admin');
+                openAddUserModal();
               }}
               className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
             >
@@ -818,23 +984,21 @@ const UserManagementPage = () => {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-slate-900 dark:text-white">{user.NAME}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">ID: {user.BETREUERID}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      ID: {user.BETREUERID} 
+                      {user.ROLLE && <span className="ml-2 px-1.5 py-0.5 bg-sky-100 dark:bg-sky-700 text-sky-700 dark:text-sky-300 rounded-full text-xs font-medium">{user.ROLLE}</span>}
+                    </p>
                   </div>
                 </div>
                 
-                <div className="col-span-6 md:col-span-7 flex items-center justify-end gap-3">
+                <div className="col-span-6 md:col-span-7 flex items-center justify-end gap-2 md:gap-3">
                   <button
-                    onClick={() => {
-                      setSelectedUser(user);
-                      setShowPasswordChangeModal(true);
-                      setPasswordError(null);
-                    }}
+                    onClick={() => openEditUserModal(user)}
                     className="inline-flex items-center px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md text-xs font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
                   >
-                    <Key size={14} className="mr-1.5" />
-                    Passwort ändern
+                    <Edit3 size={14} className="mr-1.5" />
+                    Bearbeiten
                   </button>
-                  
                   <button
                     onClick={() => setConfirmDeleteUser(user)}
                     className="inline-flex items-center px-3 py-1.5 border border-red-300 dark:border-red-800 rounded-md text-xs font-medium text-red-600 dark:text-red-400 bg-white dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
@@ -895,7 +1059,7 @@ const UserManagementPage = () => {
       </div>
       
       {/* Modals */}
-      {showAddUserModal && <AddUserModal />}
+      {showUserFormModal && <UserFormModal />}
       {showPasswordChangeModal && selectedUser && <ChangePasswordModal />}
       {confirmDeleteUser && <ConfirmDeleteModal />}
     </div>

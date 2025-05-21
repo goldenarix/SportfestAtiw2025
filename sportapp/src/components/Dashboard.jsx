@@ -21,7 +21,9 @@ import {
   Clock3,
   CheckCircle2,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Shield,
+  LogOut
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -89,7 +91,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const { user } = useAuth();
+  const { currentUser: user, loading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
   const { isDarkMode } = useTheme();
   
@@ -299,7 +301,7 @@ const Dashboard = () => {
       </div>
       
       {/* Role-specific greeting */}
-      {!loading && user && (
+      {!loading && !authLoading && user && (
         <motion.div 
           className="mb-6 p-6 bg-gradient-to-r from-indigo-600 to-purple-700 rounded-2xl text-white shadow-xl"
           initial={{ opacity: 0, y: 20 }}
@@ -313,7 +315,9 @@ const Dashboard = () => {
         >
           <div className="flex items-start space-x-4">
             <div className="bg-white/20 p-3 rounded-xl shadow-inner">
-              {betreuerStats.role === 'stationaer' ? (
+              {user.role === 'admin' ? (
+                <Shield size={28} />
+              ) : betreuerStats.role === 'stationaer' ? (
                 <MapPin size={28} />
               ) : betreuerStats.role === 'laufend' ? (
                 <Map size={28} />
@@ -323,16 +327,19 @@ const Dashboard = () => {
             </div>
             <div className="flex-1">
               <h2 className="text-xl font-semibold flex items-center">
-                {timeBasedGreeting}{betreuerStats.name ? `, ${betreuerStats.name}` : user?.name ? `, ${user.name}` : ''}!
+                {timeBasedGreeting}
+                {user.role === 'admin' ? `, Administrator ${user.name}` : betreuerStats.name ? `, ${betreuerStats.name}` : user?.name ? `, ${user.name}` : ''}!
               </h2>
               <p className="mt-1 text-indigo-100 text-opacity-90">
-                {betreuerStats.role === 'stationaer' 
-                  ? `Sie sind als stationärer Betreuer angemeldet mit ${betreuerStats.assignedDisciplines.length} zugewiesenen Disziplinen.`
-                  : betreuerStats.role === 'laufend'
-                  ? `Sie sind als laufender Betreuer angemeldet mit ${betreuerStats.assignedTeams.length} zugewiesenen Teams.` 
-                  : user && !betreuerStats.role
-                  ? 'Sie sind angemeldet, aber Ihnen wurden noch keine Rolle oder Aufgaben zugewiesen.'
-                  : 'Sie sind als Administrator angemeldet und haben Zugriff auf alle Funktionen.'}
+                {user.role === 'admin' ? (
+                  `Verwalte das Sportfest und behalte den Überblick.`
+                ) : betreuerStats.role === 'stationaer' ? (
+                  `Sie sind als stationärer Betreuer angemeldet mit ${betreuerStats.assignedDisciplines.length} zugewiesenen Disziplinen.`
+                ) : betreuerStats.role === 'laufend' ? (
+                  `Sie sind als laufender Betreuer angemeldet mit ${betreuerStats.assignedTeams.length} zugewiesenen Teams.` 
+                ) : (
+                  'Sie sind angemeldet. Willkommen zum Sportfest!'
+                )}
               </p>
               
               {/* Last login info */}
@@ -553,7 +560,11 @@ const Dashboard = () => {
                   </h2>
                 </div>
                 
-                {user ? (
+                {authLoading ? (
+                  <div className="flex justify-center items-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
+                  </div>
+                ) : user ? (
                   <div className="space-y-6">
                     {/* Role indicator */}
                     <div className="flex items-center mb-4">
@@ -562,6 +573,8 @@ const Dashboard = () => {
                           ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' 
                           : betreuerStats.role === 'laufend'
                           ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                          : user.role === 'admin'
+                          ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400'
                           : 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400'
                       }`}>
                         {betreuerStats.role === 'stationaer' ? (
@@ -579,9 +592,11 @@ const Dashboard = () => {
                             ? 'Stationärer Betreuer' 
                             : betreuerStats.role === 'laufend'
                             ? 'Laufender Betreuer'
+                            : user.role === 'admin'
+                            ? 'Administrator'
                             : betreuerStats.role 
                             ? betreuerStats.role 
-                            : 'Kein Rolle zugewiesen'}
+                            : 'Keine Rolle zugewiesen'}
                         </p>
                       </div>
                     </div>
@@ -751,6 +766,20 @@ const Dashboard = () => {
                         </div>
                       </div>
                     </div>
+                    
+                    {/* Logout Button */}
+                    <motion.button
+                      variants={itemVariants}
+                      className="w-full mt-6 py-2.5 bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center justify-center shadow-sm hover:shadow"
+                      onClick={() => {
+                        triggerHapticFeedback('medium');
+                        logout();
+                        navigate('/login');
+                      }}
+                    >
+                      <LogOut size={16} className="mr-2" />
+                      Abmelden
+                    </motion.button>
                   </div>
                 ) : (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">

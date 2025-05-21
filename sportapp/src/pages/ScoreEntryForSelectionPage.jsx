@@ -15,7 +15,7 @@ const pageVariants = {
 const ScoreEntryForSelectionPage = () => {
   const { teamId, disziplinId } = useParams();
   const navigate = useNavigate();
-  const { teams, disziplins, schueler, ergebnisse, loading: dataLoading, error: dataError, refreshData } = useDataContext();
+  const { teams, disziplins, schueler, ergebnisse, loading: dataLoading, error: dataError, refetchData } = useDataContext();
   const { user, loading: authLoading } = useAuth();
 
   const [currentTeam, setCurrentTeam] = useState(null);
@@ -42,7 +42,8 @@ const ScoreEntryForSelectionPage = () => {
     console.log("🔴 ScoreEntryPage: schueler:", schueler);
     console.log("🔴 ScoreEntryPage: currentTeam:", currentTeam);
 
-    if (schueler && currentTeam) {
+    // Striktere Prüfung: Nur fortfahren, wenn schueler ein Array ist UND currentTeam existiert
+    if (Array.isArray(schueler) && currentTeam) {
       // DEBUGGING: Logge die Struktur des ersten Schülers und die TeamID des aktuellen Teams
       if (schueler.length > 0) {
         console.log("🔍 ScoreEntryPage: Erster Schüler aus Kontext:", JSON.stringify(schueler[0]));
@@ -122,7 +123,7 @@ const ScoreEntryForSelectionPage = () => {
 
       if (response.ok && result.success) {
         setNotification({ type: 'success', message: 'Punkte erfolgreich gespeichert!' });
-        await refreshData(); // Daten neu laden, um die UI zu aktualisieren
+        await refetchData(); // Korrigiere refreshData zu refetchData beim Aufruf
         // Optional: Zurück zur Auswahlseite oder Ergebnisseite navigieren
         // navigate(`/ergebnisse/team/${teamId}/disziplin-auswahl`); // Beispiel
       } else {

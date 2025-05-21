@@ -30,7 +30,8 @@ import {
   FileText,
   User,
   MapPin,
-  Map
+  Map,
+  Layers
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 
@@ -98,6 +99,7 @@ const ErgebnissePage = () => {
   const [showStudentScoreModal, setShowStudentScoreModal] = useState(false);
   const [currentTeam, setCurrentTeam] = useState(null);
   const [currentDisziplin, setCurrentDisziplin] = useState(null);
+  const [modalStudents, setModalStudents] = useState([]); // State for students in the modal
   
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -400,15 +402,49 @@ const ErgebnissePage = () => {
     setShowDeleteModal(true);
   };
 
-  const openStudentScoreModal = (ergebnis) => {
+  const openStudentScoreModal = async (ergebnis) => {
+    triggerHapticFeedback('light'); // Added haptic feedback
     // Find the full team object based on the TEAMID
     const teamObject = teams.find(team => team.TEAMID === ergebnis.TEAMID) || {
       TEAMID: ergebnis.TEAMID,
       NAME: ergebnis.teamName
     };
     
+    // Find the full disziplin object based on the DISZIPLINID
+    const disziplinObject = disziplinen.find(d => d.DISZIPLINID === ergebnis.DISZIPLINID) || {
+      DISZIPLINID: ergebnis.DISZIPLINID,
+      NAME: ergebnis.disziplinName
+    };
+    
     setCurrentTeam(teamObject);
-    setShowStudentScoreModal(true);
+    setCurrentDisziplin(disziplinObject);
+    
+    // Fetch students for the selected team
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${baseUrl}/schueler/team/${teamObject.TEAMID}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch students for team: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success && Array.isArray(result.data)) {
+        setModalStudents(result.data);
+        setShowStudentScoreModal(true);
+      } else {
+        throw new Error(result.error || 'Failed to load students');
+      }
+    } catch (err) {
+      console.error('Error fetching students for modal:', err);
+      setNotification({
+        type: 'error',
+        message: `Fehler beim Laden der Schüler: ${err.message}`
+      });
+       setModalStudents([]); // Clear students on error
+       setShowStudentScoreModal(true); // Still open modal to show error message or empty state
+    }
   };
 
   const openDisziplinDetailPage = (disziplin) => {
@@ -843,81 +879,97 @@ const accessibleItems = useMemo(() => {
               </button>
             </div>
           ) : (
-            accessibleItems.teams.map((team, index) => (
-              <motion.div
-                key={team.TEAMID}
-                className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-100 dark:border-slate-700"
-                variants={itemVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                custom={index}
-                whileHover="hover"
-                // Klick auf die Karte navigiert zur Disziplinauswahl für dieses Team
-                onClick={() => {
-                  triggerHapticFeedback('light');
-                  navigate(`/ergebnisse/team/${team.TEAMID}/disziplin-auswahl`);
-                }}
-                layout
-              >
-                <div className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="font-semibold text-slate-800 dark:text-white text-lg">
-                        {team.NAME}
-                      </h3>
-                      <p className="text-slate-600 dark:text-slate-300 text-sm mt-1">
-                        {team.BESCHREIBUNG || "Keine Beschreibung verfügbar"}
-                      </p>
+            accessibleItems.teams.map((team, index) => {
+              // Datenaggregation für das aktuelle Team
+              const teamErgebnisseAggregiert = disziplinen.map(disziplin => {
+                const scoresForThisDiscipline = enhancedErgebnisse
+                  .filter(e => e.TEAMID === team.TEAMID && e.DISZIPLINID === disziplin.DISZIPLINID)
+                  .reduce((sum, e) => sum + (parseFloat(e.PUNKTE) || 0), 0);
+                
+                return {
+                  disziplinId: disziplin.DISZIPLINID,
+                  disziplinName: disziplin.NAME,
+                  totalPunkte: scoresForThisDiscipline,
+                };
+              })
+              .filter(agg => agg.totalPunkte > 0) // Nur Disziplinen anzeigen, in denen Punkte erzielt wurden
+              .sort((a, b) => b.totalPunkte - a.totalPunkte); // Sortieren nach Punkten
+
+              return (
+                <motion.div
+                  key={team.TEAMID}
+                  className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-100 dark:border-slate-700"
+                  variants={itemVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  custom={index}
+                  whileHover="hover"
+                  // Klick auf die Karte navigiert zur Disziplinauswahl für dieses Team
+                  onClick={() => {
+                    triggerHapticFeedback('light');
+                    navigate(`/ergebnisse/team/${team.TEAMID}/disziplin-auswahl`);
+                  }}
+                  layout
+                >
+                  <div className="p-5">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="font-semibold text-slate-800 dark:text-white text-lg">
+                          {team.NAME}
+                        </h3>
+                        <p className="text-slate-600 dark:text-slate-300 text-sm mt-1">
+                          {team.BESCHREIBUNG || "Keine Beschreibung verfügbar"}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
+                        <Map size={20} />
+                      </div>
                     </div>
-                    <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
-                      <Map size={20} />
-                    </div>
-                  </div>
-                  
-                  <div className="mt-4 grid gap-2">
-                    {enhancedErgebnisse
-                      .filter(e => e.TEAMID === team.TEAMID)
-                      .sort((a, b) => b.punkteNumber - a.punkteNumber)
-                      .slice(0, 3)
-                      .map((ergebnis) => {
-                        const disziplin = disziplinen.find(d => d.DISZIPLINID === ergebnis.DISZIPLINID);
-                        return (
-                          <div key={ergebnis.ERGEBNISID} className="p-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                    
+                    <div className="mt-4 grid gap-2">
+                      {teamErgebnisseAggregiert.length > 0 ? (
+                        teamErgebnisseAggregiert.slice(0, 3).map((aggErgebnis) => (
+                          <div key={`${team.TEAMID}-${aggErgebnis.disziplinId}`} className="p-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center">
                                 <span className="font-medium text-slate-700 dark:text-slate-300">
-                                  {disziplin?.NAME || `Disziplin ${ergebnis.DISZIPLINID}`}
+                                  {aggErgebnis.disziplinName}
                                 </span>
                               </div>
-                              <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${getPointsColor(ergebnis.PUNKTE)}`}>
-                                {ergebnis.PUNKTE || 0}
+                              <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${getPointsColor(aggErgebnis.totalPunkte)}`}>
+                                {aggErgebnis.totalPunkte}
                               </span>
                             </div>
                           </div>
-                        );
-                      })}
+                        ))
+                      ) : (
+                        <p className="text-sm text-slate-500 dark:text-slate-400 p-2">
+                          Noch keine Punkte in Disziplinen erfasst.
+                        </p>
+                      )}
+                    </div>
+                    
+                    <button 
+                      className="mt-4 w-full py-2 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-800/30 text-green-600 dark:text-green-400 rounded-lg transition-colors text-sm font-medium flex items-center justify-center"
+                      onClick={(e) => {
+                        e.stopPropagation(); // Verhindert, dass der Klick auf die Karte doppelt ausgelöst wird
+                        triggerHapticFeedback('medium');
+                        navigate(`/ergebnisse/team/${team.TEAMID}/disziplin-auswahl`);
+                      }}
+                    >
+                      <Plus size={16} className="mr-2" />
+                      Disziplin für Ergebnis auswählen
+                    </button>
                   </div>
                   
-                  <button 
-                    className="mt-4 w-full py-2 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-800/30 text-green-600 dark:text-green-400 rounded-lg transition-colors text-sm font-medium flex items-center justify-center"
-                    onClick={(e) => {
-                      e.stopPropagation(); // Verhindert, dass der Klick auf die Karte doppelt ausgelöst wird
-                      triggerHapticFeedback('medium');
-                      navigate(`/ergebnisse/team/${team.TEAMID}/disziplin-auswahl`);
-                    }}
-                  >
-                    <Plus size={16} className="mr-2" />
-                    Disziplin für Ergebnis auswählen
-                  </button>
-                </div>
-                
-                {/* Gradient bottom border */}
-                <div className="h-1" style={{ 
-                  background: 'linear-gradient(90deg, #57F287 0%, #3BA55C 100%)'
-                }}></div>
-              </motion.div>
-            ))
+                  {/* Gradient bottom border */}
+                  <div className="h-1" style={{ 
+                    background: 'linear-gradient(90deg, #57F287 0%, #3BA55C 100%)'
+                  }}></div>
+                </motion.div>
+              );
+            })
           )}
         </AnimatePresence>
       </div>
@@ -1055,68 +1107,54 @@ const accessibleItems = useMemo(() => {
               </button>
             </div>
           ) : (
-            /* Simplified Betreuer UI with just search and view toggle */
-            <div className="mb-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="relative flex-grow max-w-md">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="text"
-                    placeholder="Schnellsuche..."
-                    className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-                
-                <div className="flex items-center gap-3">
-                  {/* Team-Selektor für Betreuer mit mehr als einem Team */}
-                  {currentBetreuerData?.ROLLE === 'laufend' && accessibleItems.teams.length > 1 && (
-                    <div className="relative">
-                      <select
-                        className="pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 appearance-none"
-                        value={selectedTeam}
-                        onChange={(e) => setSelectedTeam(e.target.value)}
-                      >
-                        <option value="all">Alle meine Teams</option>
-                        {accessibleItems.teams.map(team => (
-                          <option key={team.TEAMID} value={team.TEAMID}>{team.NAME}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    </div>
-                  )}
-                  
-                  <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
-                    <button
-                      className={`p-2 rounded ${viewMode === 'card' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
-                      onClick={() => setViewMode('card')}
-                      aria-label="Card view"
-                    >
-                      <Grid className="w-5 h-5" />
-                    </button>
-                    <button
-                      className={`p-2 rounded ${viewMode === 'table' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
-                      onClick={() => setViewMode('table')}
-                      aria-label="Table view"
-                    >
-                      <List className="w-5 h-5" />
-                    </button>
+            /* Betreuer UI: Steuerleiste nur für stationäre Betreuer anzeigen */
+            currentBetreuerData && currentBetreuerData.ROLLE === 'stationaer' && (
+              <div className="mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="relative flex-grow max-w-md">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <input
+                      type="text"
+                      placeholder="Schnellsuche..."
+                      className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
                   </div>
                   
-                  <button
-                    className="flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-                    onClick={() => {
-                      openAddModal();
-                      triggerHapticFeedback('light');
-                    }}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Ergebnis hinzufügen
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {/* View mode toggle for stationaer */} 
+                    <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+                      <button
+                        className={`p-2 rounded ${viewMode === 'card' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+                        onClick={() => setViewMode('card')}
+                        aria-label="Card view"
+                      >
+                        <Grid className="w-5 h-5" />
+                      </button>
+                      <button
+                        className={`p-2 rounded ${viewMode === 'table' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+                        onClick={() => setViewMode('table')}
+                        aria-label="Table view"
+                      >
+                        <List className="w-5 h-5" />
+                      </button>
+                    </div>
+                    
+                    <button
+                      className="flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+                      onClick={() => {
+                        openAddModal();
+                        triggerHapticFeedback('light');
+                      }}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Ergebnis hinzufügen
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )
           )}
         </>
       )}
@@ -1701,9 +1739,11 @@ const accessibleItems = useMemo(() => {
       </AnimatePresence>
       
       {/* TeamDisciplineScoreModal */}
-      {showStudentScoreModal && currentTeam && (
+      {showStudentScoreModal && currentTeam && currentDisziplin && (
         <TeamDisciplineScoreModal
           team={currentTeam}
+          disziplin={currentDisziplin} // Pass the discipline object
+          students={modalStudents} // Pass the fetched students
           onClose={() => setShowStudentScoreModal(false)}
         />
       )}
@@ -1805,32 +1845,65 @@ const accessibleItems = useMemo(() => {
               exit="exit"
               variants={modalVariants}
             >
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
-                <div className="flex justify-between items-center border-b dark:border-gray-700 p-4">
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
-                    Disziplin für {currentTeam.NAME} auswählen
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full flex flex-col overflow-hidden" style={{maxHeight: '95vh'}}> {/* Increased max height, rounded corners, stronger shadow */}
+                <div className="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 p-5 sticky top-0 bg-white dark:bg-gray-800 z-10"> {/* Increased padding */}
+                  <h3 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white">
+                    Disziplin für <span className="text-green-600 dark:text-green-400">{currentTeam.NAME}</span> auswählen
                   </h3>
                   <button
                     onClick={() => setShowDisziplinSelectionModal(false)}
-                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                    className="p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-300 transition-colors"
+                    aria-label="Modal schließen"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-6 h-6" />
                   </button>
                 </div>
-                <div className="p-4 max-h-96 overflow-y-auto">
-                  <div className="space-y-2">
-                    {disziplinen.map((disziplin) => {
+                
+                {/* Search Input */}
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700 sticky top-[81px] bg-white dark:bg-gray-800 z-10"> {/* Adjusted top position based on header height */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <input
+                      type="text"
+                      placeholder="Disziplin suchen..."
+                      className="pl-10 pr-4 py-2.5 w-full border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-green-500 focus:border-green-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-inner placeholder-gray-400 dark:placeholder-gray-500"
+                      value={searchQuery} // Use existing searchQuery state
+                      onChange={(e) => setSearchQuery(e.target.value)} // Use existing setSearchQuery
+                    />
+                  </div>
+                </div>
+
+                <div className="p-5 flex-grow overflow-y-auto custom-scrollbar"> {/* Increased padding, added custom-scrollbar */}
+                  {/* Display message if no disciplines available */}
+                  {accessibleItems.disziplinen.length === 0 && (
+                    <div className="text-center py-12 text-gray-500 dark:text-gray-400 text-lg">
+                      Keine Disziplinen verfügbar.
+                    </div>
+                  )}
+                   {/* Display message if no disciplines match search */}
+                   {accessibleItems.disziplinen.filter(disziplin => disziplin.NAME.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && accessibleItems.disziplinen.length > 0 && (
+                    <div className="text-center py-12 text-gray-500 dark:text-gray-400 text-lg">
+                      Keine Disziplinen gefunden, die zur Suche passen.
+                    </div>
+                  )}
+
+                  {/* Discipline Cards Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5"> {/* Adjusted gap, added lg:cols-3 */}
+                    {/* Filter disciplines based on search query before mapping */}
+                    {accessibleItems.disziplinen
+                      .filter(disziplin => disziplin.NAME.toLowerCase().includes(searchQuery.toLowerCase()))
+                      .map((disziplin, index) => {
                       // Prüfen, ob dieses Ergebnis bereits existiert
                       const existingResult = enhancedErgebnisse.find(e => 
                         e.TEAMID === currentTeam.TEAMID && e.DISZIPLINID === disziplin.DISZIPLINID
                       );
                       
                       return (
-                        <div 
+                        <motion.div 
                           key={disziplin.DISZIPLINID}
-                          className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer transition-colors"
+                          className={`p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 cursor-pointer transition-all duration-200 shadow-md ${existingResult ? 'ring-2 ring-green-500/50 dark:ring-green-400/50' : ''}`}
                           onClick={() => {
-                            // Add a new score for this disziplin or edit existing one
+                            // Set form data for add/edit modal
                             setFormData({
                               ...formData,
                               TEAMID: currentTeam.TEAMID,
@@ -1841,34 +1914,49 @@ const accessibleItems = useMemo(() => {
                             });
                             setShowDisziplinSelectionModal(false);
                             
+                            // Set current result if editing, otherwise prepare for add
                             if (existingResult) {
                               setCurrentErgebnis(existingResult);
                               setShowEditModal(true);
                             } else {
+                              setCurrentErgebnis(null); // Ensure currentErgebnis is null for adding
                               setShowAddModal(true);
                             }
                             
                             triggerHapticFeedback('selection');
                           }}
+                          variants={itemVariants} // Apply item animation variants
+                          initial="initial"
+                          animate="animate" // Assuming the modal is visible, items animate in
+                          custom={index} // Custom index for staggered animation
+                          whileHover={{ scale: 1.03, boxShadow: "0 10px 20px rgba(0,0,0,0.1)" }} // Increased hover effect
+                          whileTap={{ scale: 0.98 }} // Scale down on tap
                         >
-                          <h4 className="font-medium text-gray-900 dark:text-white">{disziplin.NAME}</h4>
-                          {existingResult && (
-                            <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                              Bereits bewertet: 
-                              <span className="ml-1 text-green-600 dark:text-green-400 font-medium">
-                                {existingResult.PUNKTE || 0} Punkte
-                              </span>
+                          <h4 className="font-bold text-gray-900 dark:text-white text-lg mb-2">{disziplin.NAME}</h4>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 mb-4">{disziplin.BESCHREIBUNG || 'Keine Beschreibung verfügbar.'}</p>
+
+                          {existingResult ? (
+                            <div className="mt-auto text-sm text-green-700 dark:text-green-400 flex items-center font-semibold">
+                              <CheckCircle className="w-5 h-5 mr-2" />
+                              Punkte erfasst: <span className="ml-1">{existingResult.PUNKTE || 0}</span>
+                            </div>
+                          ) : (
+                            <div className="mt-auto text-sm text-gray-500 dark:text-gray-400 flex items-center">
+                                <Layers className="w-5 h-5 mr-2" />
+                              Noch keine Punkte erfasst
                             </div>
                           )}
-                        </div>
+                        </motion.div>
                       );
                     })}
                   </div>
                 </div>
-                <div className="flex justify-end bg-gray-50 dark:bg-gray-700/50 p-4 rounded-b-lg">
+                
+                {/* Footer - Keep only Abbrechen button if no Save button needed here */}
+                <div className="flex justify-end bg-gray-50 dark:bg-gray-700/50 p-4 border-t border-gray-200 dark:border-gray-700 sticky bottom-0 z-10"> {/* Adjusted border */}
                   <button
                     type="button"
-                    className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                    className="px-6 py-2 rounded-lg text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-semibold"
                     onClick={() => setShowDisziplinSelectionModal(false)}
                   >
                     Abbrechen
@@ -1879,6 +1967,7 @@ const accessibleItems = useMemo(() => {
           </>
         )}
       </AnimatePresence>
+
     </motion.div>
   );
 };
