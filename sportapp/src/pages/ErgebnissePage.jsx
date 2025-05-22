@@ -1102,12 +1102,14 @@ const accessibleItems = useMemo(() => {
     >
       {/* Header with role indicator */}
       <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2">Ergebnisse</h1>
+        {/* <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2">Ergebnisse</h1> */}
         {currentBetreuerData && (
-          <div className="flex items-center text-slate-600 dark:text-slate-400 text-sm mb-1 flex-wrap"> {/* Added flex-wrap and mb-1 */}
-            <User className="w-4 h-4 mr-1 flex-shrink-0" /> {/* Added flex-shrink-0 */}
-            <span className="mr-4">Angemeldet als {currentBetreuerData.NAME}</span> {/* Added mr-4 for spacing */}
-            <div className="flex items-center">
+          <div className="flex items-center text-sm mb-1 flex-wrap">
+            <User className="w-4 h-4 mr-1.5 flex-shrink-0 text-slate-500 dark:text-slate-400" /> 
+            <span className="mr-4 font-semibold text-slate-700 dark:text-slate-200 text-base"> {/* Enhanced styling */}
+              Angemeldet als {currentBetreuerData.NAME}
+            </span> 
+            <div className="flex items-center text-slate-600 dark:text-slate-400">
               {getRoleDisplay(currentBetreuerData).icon}
               <span className="ml-1">{getRoleDisplay(currentBetreuerData).role}</span>
             </div>

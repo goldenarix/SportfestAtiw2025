@@ -20,6 +20,7 @@
     "multer": "^2.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-dropzone": "^14.3.8",
     "react-router-dom": "^7.4.0",
     "recharts": "^2.15.1",
     "user": "^0.0.0",

@@ -124,7 +124,6 @@ const UltraModernSidebar = ({ darkMode, toggleDarkMode, isMobile, mobileOpen, se
   // Standard Menu items
   const standardMenuItems = [
     { icon: <LayoutDashboard size={20} />, title: 'Dashboard', link: '/' },
-    { icon: <Flag size={20} />, title: 'Stationen', link: '/stations' },
     { icon: <Users size={20} />, title: 'Teilnehmer', link: '/participants' },
     { icon: <Target size={20} />, title: 'Disziplinen', link: '/disziplinen' },
     { icon: <Trophy size={20} />, title: 'Ergebnisse', link: '/ergebnisse' },
@@ -182,21 +181,26 @@ const UltraModernSidebar = ({ darkMode, toggleDarkMode, isMobile, mobileOpen, se
   return (
     <>
       {/* Mobile Menu Toggle - Only show if on mobile */}
+      {/* THIS ENTIRE BLOCK WILL BE REMOVED
       {isMobile && (
         <button 
           onClick={handleMobileToggle}
-          className="fixed z-50 top-5 left-5 transition-all duration-300 hover:scale-105"
+          className={`fixed z-50 transition-all duration-300 hover:scale-105 
+                      ${mobileOpen ? 'left-4' : 'left-4'} 
+                      top-24`} 
           style={{
-            width: '46px',
-            height: '46px',
+            width: '44px', 
+            height: '44px',
             background: c.surface,
             border: `1px solid ${c.border}`,
-            borderRadius: '14px',
+            borderRadius: '12px', 
             boxShadow: c.shadow,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            transform: mobileOpen ? 'translateX(4px)' : 'none',
           }}
+          aria-label={mobileOpen ? "Menü schließen" : "Menü öffnen"}
         >
           {mobileOpen ? 
             <X size={20} style={{ color: c.text }} /> : 
@@ -204,6 +208,7 @@ const UltraModernSidebar = ({ darkMode, toggleDarkMode, isMobile, mobileOpen, se
           }
         </button>
       )}
+      */}
       
       {/* Sidebar */}
       <aside 
@@ -222,7 +227,7 @@ const UltraModernSidebar = ({ darkMode, toggleDarkMode, isMobile, mobileOpen, se
         }}
       >
         {/* Content Container */}
-        <div className="flex flex-col h-full pt-8 px-6 pb-5 relative">
+        <div className={`flex flex-col h-full pt-8 pb-5 relative ${expanded ? 'px-6' : 'px-3'}`}>
           {/* Logo Section */}
           <div className={`mb-12 flex items-center ${!expanded && 'justify-center'}`}>
             <div className="relative h-10 w-10 flex-shrink-0">
@@ -281,7 +286,23 @@ const UltraModernSidebar = ({ darkMode, toggleDarkMode, isMobile, mobileOpen, se
           </button>
 
           {/* Nav Items */}
-          <nav className="flex-1 pr-1 overflow-y-auto overflow-x-hidden">
+          <nav 
+            className={[
+              'flex-1 overflow-x-hidden',
+              expanded ? 'pr-0.5 overflow-y-auto' : 'overflow-y-hidden',
+              'scrollbar-thin',
+              isMobile ? '' : 'scrollbar-thumb-slate-400 dark:scrollbar-thumb-slate-500 hover:scrollbar-thumb-slate-500 dark:hover:scrollbar-thumb-slate-400',
+              'scrollbar-track-transparent',
+              'transition-colors duration-300',
+              // WebKit Scrollbar Base Styles
+              '[&::-webkit-scrollbar]:w-1.5',
+              '[&::-webkit-scrollbar-track]:bg-transparent',
+              '[&::-webkit-scrollbar-thumb]:rounded-full',
+              // Conditional WebKit Thumb Color & Hover
+              isMobile ? '' : '[&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-600',
+              isMobile ? '' : 'hover:[&::-webkit-scrollbar-thumb]:bg-slate-400 dark:hover:[&::-webkit-scrollbar-thumb]:bg-slate-500',
+            ].join(' ').replace(/\s+/g, ' ').trim()} // Join and clean up extra spaces
+          >
             <ul className="space-y-2">
               {menuItems.map((item, index) => {
                 const isActive = activePath === item.link;
@@ -349,8 +370,8 @@ const UltraModernSidebar = ({ darkMode, toggleDarkMode, isMobile, mobileOpen, se
           <button
             onClick={toggleDarkMode}
             className={`
-              mb-6 flex items-center py-2.5 px-2 rounded-xl
-              ${!expanded ? 'justify-center' : ''}
+              mb-6 flex items-center py-2.5 rounded-xl
+              ${!expanded ? 'justify-center px-0' : 'px-2'}
               transition-all duration-200 hover:bg-opacity-10
             `}
             style={{ background: `${c.text}05` }}
@@ -387,7 +408,7 @@ const UltraModernSidebar = ({ darkMode, toggleDarkMode, isMobile, mobileOpen, se
           >
             <div className={`flex items-center ${!expanded && 'justify-center'}`}>
               {/* User avatar */}
-              <div className="relative h-10 w-10">
+              <div className={`relative h-10 w-10 ${!expanded && 'scale-90'}`}>
                 <div 
                   className="absolute inset-0 rounded-xl overflow-hidden"
                   style={{ border: `1px solid ${c.border}` }}
@@ -427,6 +448,19 @@ const UltraModernSidebar = ({ darkMode, toggleDarkMode, isMobile, mobileOpen, se
                   }}
                 >
                   <LogOut size={16} />
+                </button>
+              )}
+              {!expanded && (
+                 <button 
+                  onClick={handleLogout}
+                  title="Logout"
+                  className="absolute bottom-4 left-1/2 transform -translate-x-1/2 p-2 rounded-full transition-all duration-200 hover:bg-opacity-10 hover:scale-105"
+                  style={{ 
+                    color: c.textSecondary,
+                    background: `${c.text}05`
+                  }}
+                >
+                  <LogOut size={18} />
                 </button>
               )}
             </div>

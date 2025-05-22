@@ -1,0 +1,454 @@
+/* ZEITPLAN ANIMATIONS - Ultra-modern CSS effects */
+
+/* Timeline Grid & Background */
+.timeline-background {
+  background-image: 
+    radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.08) 0%, rgba(99, 102, 241, 0) 70%),
+    radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0) 70%);
+}
+
+/* Event Card Hover Animations */
+.event-card {
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 14px -4px rgba(0, 0, 0, 0.1), 0 1px 0 rgba(255, 255, 255, 0.15) inset;
+}
+
+.event-card:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.15), 0 1px 0 rgba(255, 255, 255, 0.2) inset;
+  z-index: 10;
+}
+
+/* Shimmer Button Effect */
+.shimmer-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.05) 20%,
+    rgba(255, 255, 255, 0.2) 40%,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0.2) 60%,
+    rgba(255, 255, 255, 0.05) 80%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 200% 100%; 
+  animation: shimmer 3.5s infinite linear;
+  pointer-events: none;
+  opacity: 0.7;
+  border-radius: inherit; /* Inherit border-radius from parent */
+}
+
+.dark .shimmer-button::before {
+    background-image: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.02) 20%,
+    rgba(255, 255, 255, 0.08) 40%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.08) 60%,
+    rgba(255, 255, 255, 0.02) 80%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+/* Timeline Indicator Effects */
+.time-marker {
+  position: relative;
+}
+
+.time-marker::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+}
+
+.current-time-indicator {
+  position: absolute;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.7) 0%, rgba(239, 68, 68, 1) 50%, rgba(239, 68, 68, 0.7) 100%);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+  z-index: 30;
+  animation: pulse 2s infinite;
+}
+
+.current-time-indicator::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: rgb(239, 68, 68);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.5), 0 0 12px rgba(239, 68, 68, 0.8);
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.9);
+  }
+  100% {
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+  }
+}
+
+/* 3D Tilt Effect */
+.tilt-effect {
+  transition: transform 0.2s ease-out;
+}
+
+.tilt-effect:hover {
+  transform: perspective(1000px) rotateX(2deg) rotateY(2deg) scale(1.03);
+}
+
+/* Modern Button Styles */
+.modern-button {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.modern-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transform: translateX(-100%);
+  z-index: -1;
+}
+
+.modern-button:hover::before {
+  animation: shine-sweep 1.2s;
+}
+
+@keyframes shine-sweep {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Enhanced Scrollbar */
+.modern-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.modern-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modern-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.3); /* Semi-transparent gray */
+  border-radius: 10px;
+  border: 2px solid transparent; /* Creates padding around thumb */
+  background-clip: content-box;
+}
+
+.modern-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.5);
+}
+
+.dark .modern-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(107, 114, 128, 0.4); /* Darker for dark mode */
+}
+
+.dark .modern-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(107, 114, 128, 0.6);
+}
+
+/* Microinteractions */
+.micro-bounce {
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); /* Spring effect */
+}
+
+.micro-bounce:hover {
+  transform: scale(1.04);
+}
+
+/* Background Gradient Animations */
+.animated-gradient-bg {
+  background: linear-gradient(-45deg, #6366F1, #4F46E5, #7C3AED, #8B5CF6);
+  background-size: 400% 400%;
+  animation: gradient-shift 15s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Loading State Animation */
+.loading-pulse {
+  animation: pulse-fade 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-fade {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* Modern Card Effects */
+.modern-card {
+  transition: all 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+}
+
+.dark .modern-card {
+  background-color: rgba(30, 41, 59, 0.9);
+}
+
+.modern-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.15);
+}
+
+/* Focus Utility Classes */
+.focus-ring {
+  transition: all 0.2s;
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--focus-ring-color, #4f46e5); /* Indigo by default */
+}
+
+.dark .focus-ring:focus-visible {
+   box-shadow: 0 0 0 2px var(--focus-ring-color-dark, #818cf8); /* Lighter Indigo for dark mode */
+}
+
+/* Dropdown Menu Animation */
+.dropdown-content {
+  transform-origin: top center;
+  animation: dropdown-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Smooth Transitions for Dark Mode */
+.dark-mode-transition {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Parallax Effect Classes */
+.parallax-slow {
+  transition: transform 0.2s ease-out;
+}
+
+.parallax-medium {
+  transition: transform 0.1s ease-out;
+}
+
+.parallax-fast {
+  transition: transform 0.05s ease-out;
+}
+
+/* Pulse border for active/hovered elements */
+@keyframes pulse-border {
+  0% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.5); /* Default fallback color */
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(99, 102, 241, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+  }
+}
+
+.animate-pulse-border {
+  animation: pulse-border 2s infinite;
+  border-radius: inherit; /* Ensure it matches the element's border-radius */
+}
+
+/* Medium pulse border, uses CSS variable for color */
+@keyframes pulse-border-medium {
+  0% {
+    /* Use var with fallback: hsla( HSL values from var, Alpha ) */
+    box-shadow: 0 0 0 0px hsla(var(--pulse-color, 220, 70%, 65%), 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 5px hsla(var(--pulse-color, 220, 70%, 65%), 0.15);
+  }
+  100% {
+    box-shadow: 0 0 0 0px hsla(var(--pulse-color, 220, 70%, 65%), 0.5);
+  }
+}
+
+.animate-pulse-border-medium {
+  animation: pulse-border-medium 1.8s infinite ease-out;
+  border-radius: inherit; 
+}
+
+/* Current time indicator subtle pulse */
+@keyframes pulse-indicator {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+.current-time-indicator > div { /* Targeting the dot */
+  animation: pulse-indicator 2.5s infinite ease-in-out;
+}
+
+/* Event card entrance animation (can be combined with Framer Motion) */
+.event-card-enter {
+  opacity: 0;
+  transform: translateY(15px) scale(0.98);
+}
+.event-card-enter-active {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition: opacity 300ms ease-out, transform 300ms ease-out;
+}
+
+/* Subtle background pattern if needed - an example */
+.subtle-bg-pattern {
+    background-image: radial-gradient(circle at 1px 1px, rgba(0,0,0,0.03) 1px, transparent 0);
+    background-size: 20px 20px;
+}
+.dark .subtle-bg-pattern {
+    background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.02) 1px, transparent 0);
+}
+
+/* Tilt effect for cards - can be applied on hover */
+.tilt-card {
+  transition: transform 0.3s ease-out;
+}
+
+.tilt-card:hover {
+  transform: perspective(1000px) rotateX(2deg) rotateY(-3deg) scale(1.03);
+}
+
+/* General button styling (can be extended) */
+.modern-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+}
+
+.modern-button:active {
+    transform: translateY(0px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.dark .modern-button:hover {
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+.dark .modern-button:active {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.modern-button-secondary {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s ease-out;
+}
+
+.modern-button-secondary:hover {
+    transform: translateY(-1px);
+    /* Slightly different shadow for secondary buttons or adjust as needed */
+     box-shadow: 0 3px 8px rgba(0,0,0,0.07);
+}
+
+.dark .modern-button-secondary:hover {
+    box-shadow: 0 3px 12px rgba(0,0,0,0.18);
+}
+
+/* New Ultra Modern Pulse Border Animation */
+@keyframes pulse-border-ultra-modern {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(var(--pulse-color), 0.5);
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(var(--pulse-color), 0.1), 0 0 0 1px rgba(var(--pulse-color), 0.4);
+    transform: scale(1.01);
+    opacity: 1;
+  }
+}
+
+.animate-pulse-border-ultra-modern {
+  animation: pulse-border-ultra-modern 2.2s infinite cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: box-shadow, transform, opacity; /* Performance hint */
+}
+
+/* Existing pulse-border-intense - let's ensure it doesn't conflict or can be merged/removed if redundant */
+/* Consider reviewing if .animate-pulse-border-intense is still needed or if ultra-modern replaces it */
+@keyframes pulse-border-intense {
+  0% {
+    box-shadow: 0 0 0 0px rgba(var(--pulse-color), 0.7), 0 0 0 0px rgba(var(--pulse-color), 0.7);
+    opacity: 0.8;
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(var(--pulse-color), 0.1), 0 0 0 1px rgba(var(--pulse-color), 0.5);
+    opacity: 1;
+  }
+  100% {
+    box-shadow: 0 0 0 0px rgba(var(--pulse-color), 0.7), 0 0 0 0px rgba(var(--pulse-color), 0.7);
+    opacity: 0.8;
+  }
+}
+
+.animate-pulse-border-intense {
+  animation: pulse-border-intense 1.8s infinite;
+} 

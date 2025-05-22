@@ -32,11 +32,16 @@ import {
   Layers,
   Clipboard,
   GraduationCap,
-  Settings // Added for edit/assign button
+  Settings,
+  CloudUpload,
+  FileCheck,
+  Loader2
 } from 'lucide-react';
 import { triggerHapticFeedback } from '../utils/haptics';
 import { useMediaQuery } from '../utils/responsive';
 import { useAuth } from '../contexts/AuthContext'; // Import useAuth
+import { useTheme } from '../contexts/ThemeProvider'; // Import useTheme
+import { useDropzone } from 'react-dropzone';
 
 // Animation variants
 const pageVariants = {
@@ -81,6 +86,7 @@ const TeilnehmerPage = () => {
   // Responsive states
   const isMobile = useMediaQuery('(max-width: 640px)');
   const isTablet = useMediaQuery('(max-width: 1024px)');
+  const { isDarkMode } = useTheme(); // Get isDarkMode state
   
   // Auth context
   const { currentUser, isAdmin, loading: authLoading, updateBetreuer: contextUpdateBetreuer, registerBetreuer: contextRegisterBetreuer } = useAuth(); // Added contextUpdateBetreuer and contextRegisterBetreuer
@@ -113,6 +119,7 @@ const TeilnehmerPage = () => {
   const [showEditStudentModal, setShowEditStudentModal] = useState(false);
   const [showDeleteStudentModal, setShowDeleteStudentModal] = useState(false);
   const [showAssignStudentsModal, setShowAssignStudentsModal] = useState(false);
+  const [showExcelImportModal, setShowExcelImportModal] = useState(false);
   
   // Current items for editing/deleting/assigning
   const [currentTeam, setCurrentTeam] = useState(null);
@@ -152,6 +159,11 @@ const TeilnehmerPage = () => {
   
   // Notification state
   const [notification, setNotification] = useState(null);
+  const [importFile, setImportFile] = useState(null);
+  const [importError, setImportError] = useState(null);
+  const [importSuccessMessage, setImportSuccessMessage] = useState(null);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [isLoadingImport, setIsLoadingImport] = useState(false);
   
   // Fetch data on component mount
   useEffect(() => {
@@ -1089,1691 +1101,1695 @@ const TeilnehmerPage = () => {
     return [...new Set(allClasses)].sort();
   }, [students]);
 
+  // Main render
   return (
-    <motion.div 
-      className="p-4 md:p-6 lg:p-8 min-h-screen bg-gradient-to-br from-slate-50 to-sky-50 dark:from-slate-900 dark:to-sky-950"
+    <motion.div
+      className={`p-4 md:p-6 lg:p-8 min-h-screen ${
+        isDarkMode 
+          ? 'bg-slate-900 text-slate-100'
+          : 'bg-slate-100 text-slate-800'
+      } transition-colors duration-300`}
+      variants={pageVariants}
       initial="initial"
       animate="animate"
       exit="exit"
-      variants={pageVariants}
     >
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mb-2">Teilnehmer</h1>
-        <p className="text-slate-600 dark:text-slate-400">
-          {isAdmin() ? "Verwalten Sie Teams, Betreuer und Schüler." : "Übersicht der Teilnehmer."} {/* MODIFIED: isAdmin -> isAdmin() */}
-        </p>
-        {!isAdmin() && currentBetreuerDataForPage && ( // MODIFIED: isAdmin -> isAdmin()
-          <div className="mt-2 text-sm text-sky-700 dark:text-sky-300">
-            <UserCog size={16} className="inline mr-1.5 align-text-bottom"/>
-             Angemeldet als {currentBetreuerDataForPage.NAME} ({getBetreuerRolleLabel(currentBetreuerDataForPage.ROLLE)})
-          </div>
-        )}
-      </div>
-      
-      {/* Tabs */}
-      <div className="flex mb-6 border-b border-gray-200">
-        <button 
-          className={`px-4 py-2 font-medium text-sm ${activeTab === 'teams' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600'}`}
-          onClick={() => {
-            setActiveTab('teams');
-            triggerHapticFeedback('selection');
-          }}
-        >
-          <Users className="w-4 h-4 inline mr-2" />
-          Teams
-        </button>
-        <button 
-          className={`px-4 py-2 font-medium text-sm ${activeTab === 'betreuer' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600'}`}
-          onClick={() => {
-            setActiveTab('betreuer');
-            triggerHapticFeedback('selection');
-          }}
-        >
-          <UserCog className="w-4 h-4 inline mr-2" />
-          Betreuer
-        </button>
-        <button 
-          className={`px-4 py-2 font-medium text-sm ${activeTab === 'students' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600'}`}
-          onClick={() => {
-            setActiveTab('students');
-            triggerHapticFeedback('selection');
-          }}
-        >
-          <GraduationCap className="w-4 h-4 inline mr-2" />
-          Schüler
-        </button>
-      </div>
-      
-      {/* Search and controls */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-2">
-        <div className="relative w-full md:w-64">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <input
-            type="text"
-            placeholder={`Suche nach ${activeTab === 'teams' ? 'Teams' : activeTab === 'betreuer' ? 'Betreuern' : 'Schülern'}...`}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
-            <button
-              className={`p-2 ${viewMode === 'card' ? 'bg-blue-100 text-blue-600' : 'bg-white text-gray-600'}`}
-              onClick={() => setViewMode('card')}
-              aria-label="Card-Ansicht"
-            >
-              <Grid className="w-5 h-5" />
-            </button>
-            <button
-              className={`p-2 ${viewMode === 'table' ? 'bg-blue-100 text-blue-600' : 'bg-white text-gray-600'}`}
-              onClick={() => setViewMode('table')}
-              aria-label="Tabellen-Ansicht"
-            >
-              <List className="w-5 h-5" />
-            </button>
-          </div>
-          
-          {isAdmin() && ( // MODIFIED: isAdmin -> isAdmin()
-            <button
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center hover:bg-blue-700 transition-colors"
-              onClick={() => {
-                if (activeTab === 'teams') {
-                  resetTeamForm();
-                  setShowAddTeamModal(true);
-                } else if (activeTab === 'betreuer') {
-                  // resetBetreuerForm(); // Wird jetzt im BetreuerFormModal gehandhabt
-                  openBetreuerFormModal(b); // Öffnet das neue Modal im "Hinzufügen"-Modus
-                  // setShowAddBetreuerModal(true); // Veraltet
-                } else if (activeTab === 'students') {
-                  resetStudentForm();
-                  setShowAddStudentModal(true);
-                }
-                triggerHapticFeedback('success');
-              }}
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              {activeTab === 'teams' ? 'Team hinzufügen' : activeTab === 'betreuer' ? 'Betreuer hinzufügen' : 'Schüler hinzufügen'}
-            </button>
-          )}
-        </div>
-      </div>
-      
-      {/* Loading state */}
-      {(loading || authLoading) && ( // Check both loading states
-        <div className="flex justify-center items-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-sky-500"></div>
-        </div>
-      )}
-      
-      {/* Error state */}
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">
-          <div className="flex items-center">
-            <AlertTriangle className="w-5 h-5 mr-2" />
-            <p>{error}</p>
-          </div>
-        </div>
-      )}
-      
-      {/* Content based on active tab */}
-      {!loading && !error && (
-        <AnimatePresence mode="wait">
-          {activeTab === 'teams' && (
-            <motion.div 
-              key="teams"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={pageVariants}
-            >
-              {viewMode === 'card' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {itemsToDisplay.teams.length > 0 ? (
-                    itemsToDisplay.teams.map((team, index) => (
-                      <motion.div
-                        key={team.TEAMID}
-                        variants={cardVariants}
-                        custom={index}
-                        whileHover="hover"
-                        className="bg-white rounded-lg shadow-md overflow-hidden"
-                      >
-                        <div className="p-4 border-b">
-                          <h3 className="text-lg font-semibold text-gray-900 truncate">{team.NAME}</h3>
-                          <p className="text-sm text-gray-600">ID: {team.TEAMID}</p>
-                        </div>
-                        <div className="p-4">
-                          <div className="mb-2">
-                            <p className="text-sm font-medium text-gray-700">Schüler</p>
-                            <p className="text-sm text-gray-600">
-                              {students.filter(s => s.TEAMID === team.TEAMID).length || 0} Mitglieder
-                            </p>
-                          </div>
-                        </div>
-                        {isAdmin() && ( // MODIFIED: isAdmin -> isAdmin()
-                          <div className="px-4 py-3 bg-gray-50 dark:bg-slate-700/50 flex justify-end gap-2">
-                            <button
-                              onClick={() => {
-                                openAssignStudentsModal(team);
-                                triggerHapticFeedback('light');
-                              }}
-                              className="p-2 text-blue-600 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-blue-700/50 rounded-md transition-colors"
-                              aria-label="Schüler zuweisen"
-                              title="Schüler zuweisen"
-                            >
-                              <UserPlus className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                openEditTeamModal(team);
-                                triggerHapticFeedback('light');
-                              }}
-                              className="p-2 text-amber-600 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-700/50 rounded-md transition-colors"
-                              aria-label="Team bearbeiten"
-                              title="Team bearbeiten"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                openDeleteTeamModal(team);
-                                triggerHapticFeedback('light');
-                              }}
-                              className="p-2 text-red-600 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-700/50 rounded-md transition-colors"
-                              aria-label="Team löschen"
-                              title="Team löschen"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
-                      </motion.div>
-                    ))
-                  ) : (
-                    <div className="col-span-full text-center py-12 text-gray-500">
-                      Keine Teams gefunden oder zugewiesen.
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                          onClick={() => toggleSort('name')}
-                        >
-                          <div className="flex items-center">
-                            Team Name
-                            {sortBy === 'name' && (
-                              <ArrowUpDown className="ml-1 w-4 h-4" />
-                            )}
-                          </div>
-                        </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Anzahl Schüler
-                        </th>
-                        <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Aktionen
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {itemsToDisplay.teams.length > 0 ? (
-                        itemsToDisplay.teams.map((team, index) => (
-                          <motion.tr 
-                            key={team.TEAMID}
-                            variants={itemVariants}
-                            custom={index}
-                          >
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">{team.NAME}</div>
-                              <div className="text-sm text-gray-500">ID: {team.TEAMID}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-900">
-                                {students.filter(s => s.TEAMID === team.TEAMID).length || 0} Mitglieder
-                              </div>
-                            </td>
-                            {isAdmin() && ( // MODIFIED: isAdmin -> isAdmin() Aktionen nur für Admins
-                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <button
-                                  onClick={() => {
-                                    openAssignStudentsModal(team);
-                                    triggerHapticFeedback('light');
-                                  }}
-                                  className="text-blue-600 hover:text-blue-900 mr-3"
-                                >
-                                  <UserPlus className="w-4 h-4 inline" />
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    openEditTeamModal(team);
-                                    triggerHapticFeedback('light');
-                                  }}
-                                  className="text-amber-600 hover:text-amber-900 mr-3"
-                                >
-                                  <Edit className="w-4 h-4 inline" />
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    openDeleteTeamModal(team);
-                                    triggerHapticFeedback('light');
-                                  }}
-                                  className="text-red-600 hover:text-red-900"
-                                >
-                                  <Trash2 className="w-4 h-4 inline" />
-                                </button>
-                              </td>
-                            )}
-                          </motion.tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan="3" className="px-6 py-4 text-center text-sm text-gray-500">
-                            Keine Teams gefunden oder zugewiesen.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </motion.div>
-          )}
-          
-          {activeTab === 'betreuer' && (
-            <motion.div 
-              key="betreuer"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={pageVariants}
-            >
-              {viewMode === 'card' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {itemsToDisplay.betreuer.length > 0 ? (
-                    itemsToDisplay.betreuer.map((b, index) => ( // Renamed for clarity
-                      <motion.div
-                        key={b.BETREUERID}
-                        variants={cardVariants}
-                        custom={index}
-                        whileHover="hover"
-                        className="bg-white rounded-lg shadow-md overflow-hidden"
-                      >
-                        <div className="p-4 border-b">
-                          <h3 className="text-lg font-semibold text-gray-900 truncate">{b.NAME}</h3>
-                          <div className="flex items-center mt-1">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              b.ROLLE === 'stationaer' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'
-                            }`}>
-                              {b.ROLLE === 'stationaer' ? (
-                                <MapPin className="w-3 h-3 mr-1" />
-                              ) : (
-                                <Map className="w-3 h-3 mr-1" />
-                              )}
-                              {getBetreuerRolleLabel(b.ROLLE)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="p-4">
-                          {b.ROLLE === 'stationaer' ? (
-                            <div className="mb-2">
-                              <p className="text-sm font-medium text-gray-700">Zugewiesene Disziplinen</p>
-                              <p className="text-sm text-gray-600 truncate">
-                                {b.disziplinen?.length > 0 
-                                  ? b.disziplinen.map(d => getDisziplinName(d.DISZIPLINID) || `ID ${d.DISZIPLINID}`).join(', ')
-                                  : 'Keine Disziplinen zugewiesen'}
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="mb-2">
-                              <p className="text-sm font-medium text-gray-700">Zugewiesene Teams</p>
-                              <p className="text-sm text-gray-600 truncate">
-                                {b.teams?.length > 0 
-                                  ? b.teams.map(t => getTeamName(t.TEAMID) || `ID ${t.TEAMID}`).join(', ')
-                                  : 'Keine Teams zugewiesen'}
-                              </p>
-                            </div>
-                          )}
-                          
-                          {isAdmin() && ( // MODIFIED: isAdmin -> isAdmin() Passwort nur für Admin sichtbar
-                            <div className="mt-3 flex items-center">
-                              <button
-                                onClick={() => setShowPasswords(prev => ({...prev, [b.BETREUERID]: !prev[b.BETREUERID]}))}
-                                className="text-gray-600 hover:text-gray-900 mr-2"
-                              >
-                                {showPasswords[b.BETREUERID] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                              </button>
-                              <p className="text-sm text-gray-700">
-                                {showPasswords[b.BETREUERID] ? (b.PASSWORT || '*****') : '*****'}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                        {isAdmin() && ( // MODIFIED: isAdmin -> isAdmin() Aktionen nur für Admins
-                          <div className="px-4 py-3 bg-gray-50 flex justify-end gap-2">
-                            {b.ROLLE === 'stationaer' ? (
-                              <button
-                                onClick={() => {
-                                  openAssignDisziplinenModal(b);
-                                  triggerHapticFeedback('light');
-                                }}
-                                className="p-2 text-purple-600 hover:bg-purple-100 rounded"
-                                aria-label="Disziplinen zuweisen"
-                              >
-                                <Layers className="w-4 h-4" />
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  openAssignTeamsModal(b);
-                                  triggerHapticFeedback('light');
-                                }}
-                                className="p-2 text-green-600 hover:bg-green-100 rounded"
-                                aria-label="Teams zuweisen"
-                              >
-                                <Users className="w-4 h-4" />
-                              </button>
-                            )}
-                            <button
-                              onClick={() => {
-                                openBetreuerFormModal(true, b);
-                                triggerHapticFeedback('light');
-                              }}
-                              className="p-2 text-amber-600 hover:bg-amber-100 rounded"
-                              aria-label="Betreuer bearbeiten"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                openDeleteBetreuerModal(b);
-                                triggerHapticFeedback('light');
-                              }}
-                              className="p-2 text-red-600 hover:bg-red-100 rounded"
-                              aria-label="Betreuer löschen"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
-                      </motion.div>
-                    ))
-                  ) : (
-                    <div className="col-span-full text-center py-12 text-gray-500">
-                      Keine Betreuer gefunden oder zugewiesen.
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                          onClick={() => toggleSort('name')}
-                        >
-                          <div className="flex items-center">
-                            Name
-                            {sortBy === 'name' && (
-                              <ArrowUpDown className="ml-1 w-4 h-4" />
-                            )}
-                          </div>
-                        </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                          onClick={() => toggleSort('rolle')}
-                        >
-                          <div className="flex items-center">
-                            Rolle
-                            {sortBy === 'rolle' && (
-                              <ArrowUpDown className="ml-1 w-4 h-4" />
-                            )}
-                          </div>
-                        </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Zuweisungen
-                        </th>
-                        <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Aktionen
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {itemsToDisplay.betreuer.length > 0 ? (
-                        itemsToDisplay.betreuer.map((b, index) => ( // Renamed for clarity
-                          <motion.tr 
-                            key={b.BETREUERID}
-                            variants={itemVariants}
-                            custom={index}
-                          >
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">{b.NAME}</div>
-                              <div className="text-sm text-gray-500">ID: {b.BETREUERID}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                b.ROLLE === 'stationaer' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'}`}>
-                                {b.ROLLE === 'stationaer' ? <MapPin size={14} className="mr-1"/> : <Map size={14} className="mr-1"/>}
-                                {getBetreuerRolleLabel(b.ROLLE)}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="text-sm text-gray-900">
-                                {b.ROLLE === 'stationaer' 
-                                  ? `${b.disziplinen?.length || 0} Disziplin(en)`
-                                  : `${b.teams?.length || 0} Team(s)`}
-                              </div>
-                              <div className="text-xs text-gray-500 dark:text-slate-400 truncate max-w-xs">
-                                {b.ROLLE === 'stationaer' 
-                                  ? (b.disziplinen?.map(d => d.NAME).join(', ') || 'Keine')
-                                  : (b.teams?.map(t => t.NAME).join(', ') || 'Keine')}
-                              </div>
-                            </td>
-                            {isAdmin() && ( // MODIFIED: isAdmin -> isAdmin()
-                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                                <button onClick={() => openBetreuerFormModal(true, b)} className="p-1.5 text-sky-600 hover:bg-sky-100 dark:text-sky-400 dark:hover:bg-sky-700/50 rounded-md transition-colors" title="Bearbeiten & Zuweisen">
-                                  <Settings size={16} />
-                                </button>
-                                <button onClick={() => openDeleteBetreuerModal(b)} className="p-1.5 text-red-600 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-700/50 rounded-md transition-colors" title="Löschen">
-                                  <Trash2 size={16} />
-                                </button>
-                              </td>
-                            )}
-                          </motion.tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={isAdmin() ? 4 : 3} className="px-6 py-10 text-center text-sm text-slate-500 dark:text-slate-400 italic">Keine Betreuer gefunden.</td> {/* MODIFIED: isAdmin -> isAdmin() */}
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </motion.div>
-          )}
+      <div className="max-w-7xl mx-auto">
+        {/* <header className="mb-6 md:mb-8">
+          <h1 className="text-3xl md:text-4xl font-bold mb-2">Teilnehmerverwaltung</h1>
+          <p className="text-gray-400 text-sm md:text-base">
+            Verwalten Sie Teams, Betreuer und Schüler.
+          </p>
+        </header> */}
 
-          {activeTab === 'students' && (
-            <motion.div 
-              key="students"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={pageVariants}
+        {/* Notifications */}
+        <AnimatePresence>
+          {notification && (
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg ${
+                notification.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+              }`}
             >
-              {viewMode === 'card' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {itemsToDisplay.students.length > 0 ? (
-                    itemsToDisplay.students.map((student, index) => (
-                      <motion.div
-                        key={student.SCHUELERID}
-                        variants={cardVariants}
-                        custom={index}
-                        whileHover="hover"
-                        className="bg-white rounded-lg shadow-md overflow-hidden"
-                      >
-                        <div className="p-4 border-b">
-                          <h3 className="text-lg font-semibold text-gray-900 truncate">{student.VORNAME} {student.NACHNAME}</h3>
-                          <p className="text-sm text-gray-600">Klasse: {student.KLASSE || 'Nicht zugewiesen'}</p>
-                        </div>
-                        <div className="p-4">
-                          <div className="mb-2">
-                            <p className="text-sm font-medium text-gray-700">Team</p>
-                            <p className="text-sm text-gray-600">{getTeamName(student.TEAMID)}</p>
-                          </div>
-                          <div className="mb-2">
-                            <p className="text-sm font-medium text-gray-700">Geburtsdatum</p>
-                            <p className="text-sm text-gray-600">{student.GEBURTSDATUM || 'Nicht angegeben'}</p>
-                          </div>
-                          <div className="mb-2">
-                            <p className="text-sm font-medium text-gray-700">Geschlecht</p>
-                            <p className="text-sm text-gray-600">{student.GESCHLECHT || 'Nicht angegeben'}</p>
-                          </div>
-                        </div>
-                        {isAdmin() && ( // MODIFIED: isAdmin -> isAdmin()
-                          <div className="px-4 py-3 bg-gray-50 flex justify-end gap-2">
-                            <button
-                              onClick={() => {
-                                openEditStudentModal(student);
-                                triggerHapticFeedback('light');
-                              }}
-                              className="p-2 text-amber-600 hover:bg-amber-100 rounded"
-                              aria-label="Schüler bearbeiten"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                openDeleteStudentModal(student);
-                                triggerHapticFeedback('light');
-                              }}
-                              className="p-2 text-red-600 hover:bg-red-100 rounded"
-                              aria-label="Schüler löschen"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
-                      </motion.div>
-                    ))
-                  ) : (
-                    <div className="col-span-full text-center py-12 text-gray-500">
-                      Keine Schüler gefunden oder zugewiesen.
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                          onClick={() => toggleSort('name')}
-                        >
-                          <div className="flex items-center">
-                            Name
-                            {sortBy === 'name' && (
-                              <ArrowUpDown className="ml-1 w-4 h-4" />
-                            )}
-                          </div>
-                        </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                          onClick={() => toggleSort('klasse')}
-                        >
-                          <div className="flex items-center">
-                            Klasse
-                            {sortBy === 'klasse' && (
-                              <ArrowUpDown className="ml-1 w-4 h-4" />
-                            )}
-                          </div>
-                        </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                          onClick={() => toggleSort('team')}
-                        >
-                          <div className="flex items-center">
-                            Team
-                            {sortBy === 'team' && (
-                              <ArrowUpDown className="ml-1 w-4 h-4" />
-                            )}
-                          </div>
-                        </th>
-                        <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Aktionen
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {itemsToDisplay.students.length > 0 ? (
-                        itemsToDisplay.students.map((student, index) => (
-                          <motion.tr 
-                            key={student.SCHUELERID}
-                            variants={itemVariants}
-                            custom={index}
-                          >
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">{student.VORNAME} {student.NACHNAME}</div>
-                              <div className="text-sm text-gray-500">ID: {student.SCHUELERID}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-900">{student.KLASSE || 'Nicht zugewiesen'}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-900">{getTeamName(student.TEAMID)}</div>
-                            </td>
-                            {isAdmin() && ( // MODIFIED: isAdmin -> isAdmin() Aktionen nur für Admins
-                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <button
-                                  onClick={() => {
-                                    openEditStudentModal(student);
-                                    triggerHapticFeedback('light');
-                                  }}
-                                  className="text-amber-600 hover:text-amber-900 mr-3"
-                                >
-                                  <Edit className="w-4 h-4 inline" />
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    openDeleteStudentModal(student);
-                                    triggerHapticFeedback('light');
-                                  }}
-                                  className="text-red-600 hover:text-red-900"
-                                >
-                                  <Trash2 className="w-4 h-4 inline" />
-                                </button>
-                              </td>
-                            )}
-                          </motion.tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan="4" className="px-6 py-4 text-center text-sm text-gray-500">
-                            Keine Schüler gefunden oder zugewiesen.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <div className="flex items-center">
+                {notification.type === 'success' ? (
+                  <CheckCircle className="w-5 h-5 mr-2" />
+                ) : (
+                  <AlertTriangle className="w-5 h-5 mr-2" />
+                )}
+                <p>{notification.message}</p>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
-      )}
-      
-      {/* Notification */}
-      <AnimatePresence>
-        {notification && (
-          <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg ${
-              notification.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+
+        {/* Tabs */}
+        <div className={`flex mb-6 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+          <button
+            className={`px-4 py-3 font-semibold text-sm transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 ${
+              activeTab === 'teams'
+                ? (isDarkMode ? 'text-sky-400 border-sky-400 ring-sky-500/50' : 'text-sky-600 border-sky-600 ring-sky-600/50') + ' border-b-2'
+                : (isDarkMode ? 'text-slate-400 hover:text-sky-400 border-transparent hover:border-sky-500/30' : 'text-slate-500 hover:text-sky-600 border-transparent hover:border-sky-600/30')
+            } rounded-t-md`}
+            onClick={() => {
+              setActiveTab('teams');
+              triggerHapticFeedback('selection');
+            }}
+          >
+            <Users className="w-4 h-4 inline mr-2" />
+            Teams
+          </button>
+          <button
+            className={`px-4 py-3 font-semibold text-sm transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 ${activeTab === 'betreuer'
+              ? (isDarkMode ? 'text-sky-400 border-sky-400 ring-sky-500/50' : 'text-sky-600 border-sky-600 ring-sky-600/50') + ' border-b-2'
+              : (isDarkMode ? 'text-slate-400 hover:text-sky-400 border-transparent hover:border-sky-500/30' : 'text-slate-500 hover:text-sky-600 border-transparent hover:border-sky-600/30')
+            } rounded-t-md`}
+            onClick={() => {
+              setActiveTab('betreuer');
+              triggerHapticFeedback('selection');
+            }}
+          >
+            <UserCog className="w-4 h-4 inline mr-2" />
+            Betreuer
+          </button>
+          <button
+            className={`px-4 py-2 font-medium text-sm transition-colors ${activeTab === 'students'
+              ? (isDarkMode ? 'text-sky-400 border-sky-400' : 'text-sky-600 border-sky-600') + ' border-b-2'
+              : (isDarkMode ? 'text-slate-400 hover:text-sky-400' : 'text-slate-500 hover:text-sky-600')
             }`}
+            onClick={() => {
+              setActiveTab('students');
+              triggerHapticFeedback('selection');
+            }}
           >
+            <GraduationCap className="w-4 h-4 inline mr-2" />
+            Schüler
+          </button>
+        </div>
+        
+        {/* Search and controls */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-2">
+          <div className="relative w-full md:w-64">
+            <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${isDarkMode ? 'text-slate-500' : 'text-slate-400'} w-4 h-4`} />
+            <input
+              type="text"
+              placeholder={`Suche nach ${activeTab === 'teams' ? 'Teams…' : activeTab === 'betreuer' ? 'Betreuern…' : 'Schülern…'}`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={`pl-10 pr-4 py-2 w-full border rounded-lg transition-colors
+                ${isDarkMode
+                  ? 'bg-slate-800 border-slate-600 placeholder-slate-500 text-slate-200 focus:ring-sky-500 focus:border-sky-500'
+                  : 'bg-white border-slate-300 placeholder-slate-400 text-slate-700 focus:ring-sky-500 focus:border-sky-500'
+                }`}
+            />
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <div className={`flex items-center border ${isDarkMode ? 'border-slate-600' : 'border-slate-300'} rounded-lg overflow-hidden`}>
+              <button
+                className={`p-2 transition-colors ${viewMode === 'card'
+                    ? (isDarkMode ? 'bg-sky-700 text-sky-100' : 'bg-sky-100 text-sky-700')
+                    : (isDarkMode ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-white text-slate-500 hover:bg-slate-50')
+                  }`}
+                onClick={() => setViewMode('card')}
+                aria-label="Card-Ansicht"
+              >
+                <Grid className="w-5 h-5" />
+              </button>
+              <button
+                className={`p-2 transition-colors ${viewMode === 'table'
+                    ? (isDarkMode ? 'bg-sky-700 text-sky-100' : 'bg-sky-100 text-sky-700')
+                    : (isDarkMode ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-white text-slate-500 hover:bg-slate-50')
+                  }`}
+                onClick={() => setViewMode('table')}
+                aria-label="Tabellen-Ansicht"
+              >
+                <List className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {isAdmin() && ( // MODIFIED: isAdmin -> isAdmin()
+              <button
+                className="px-4 py-2 bg-sky-600 text-white rounded-lg flex items-center hover:bg-sky-700 transition-colors shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900 dark:bg-sky-500 dark:hover:bg-sky-400"
+                onClick={() => {
+                  if (activeTab === 'teams') {
+                    resetTeamForm();
+                    setShowAddTeamModal(true);
+                  } else if (activeTab === 'betreuer') {
+                    openBetreuerFormModal(false, null); 
+                  } else if (activeTab === 'students') {
+                    resetStudentForm();
+                    setShowAddStudentModal(true);
+                  }
+                  triggerHapticFeedback('light'); // Changed from 'success' to 'light'
+                }}
+              >
+                <Plus className="w-4 h-4 mr-1.5" />
+                {activeTab === 'teams' ? 'Team' : activeTab === 'betreuer' ? 'Betreuer' : 'Schüler'} hinzufügen
+              </button>
+            )}
+          </div>
+        </div>
+        
+        {/* Loading state */}
+        {(loading || authLoading) && ( // Check both loading states
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-sky-500"></div>
+          </div>
+        )}
+        
+        {/* Error state */}
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">
             <div className="flex items-center">
-              {notification.type === 'success' ? (
-                <CheckCircle className="w-5 h-5 mr-2" />
-              ) : (
-                <AlertTriangle className="w-5 h-5 mr-2" />
-              )}
-              <p>{notification.message}</p>
+              <AlertTriangle className="w-5 h-5 mr-2" />
+              <p>{error}</p>
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
-      
-      {/* Modals */}
-      {/* Add Team Modal */}
-      <AnimatePresence>
-        {showAddTeamModal && (
-          <>
-            <motion.div
-              className="fixed inset-0 bg-black bg-opacity-50 z-40"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={backdropVariants}
-              onClick={() => setShowAddTeamModal(false)}
-            ></motion.div>
-            <motion.div
-              className="fixed inset-0 flex items-center justify-center z-50 p-4"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={modalVariants}
-            >
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full">
-                <div className="flex justify-between items-center border-b dark:border-slate-700 p-4">
-                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Team hinzufügen</h3>
-                  <button
-                    onClick={() => setShowAddTeamModal(false)}
-                    className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="p-4">
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Team Name</label>
-                    <input
-                      type="text"
-                      name="NAME"
-                      value={teamFormData.NAME}
-                      onChange={handleTeamFormChange}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-sky-500 focus:border-sky-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end bg-gray-50 dark:bg-slate-700/50 p-4 rounded-b-lg">
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg mr-2 hover:bg-gray-300 transition-colors dark:bg-slate-600 dark:text-slate-300 dark:hover:bg-slate-500"
-                    onClick={() => setShowAddTeamModal(false)}
-                  >
-                    Abbrechen
-                  </button>
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-white bg-sky-600 rounded-lg hover:bg-sky-700 transition-colors shadow-md"
-                    onClick={() => {
-                      handleAddTeam();
-                      triggerHapticFeedback('success');
-                    }}
-                  >
-                    <Save className="w-4 h-4 inline mr-1" />
-                    Speichern
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-      
-      {/* Edit Team Modal */}
-      <AnimatePresence>
-        {showEditTeamModal && currentTeam && (
-          <>
-            <motion.div
-              className="fixed inset-0 bg-black bg-opacity-50 z-40"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={backdropVariants}
-              onClick={() => setShowEditTeamModal(false)}
-            ></motion.div>
-            <motion.div
-              className="fixed inset-0 flex items-center justify-center z-50 p-4"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={modalVariants}
-            >
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full">
-                <div className="flex justify-between items-center border-b dark:border-slate-700 p-4">
-                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Team bearbeiten</h3>
-                  <button
-                    onClick={() => setShowEditTeamModal(false)}
-                    className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="p-4">
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Team Name</label>
-                    <input
-                      type="text"
-                      name="NAME"
-                      value={teamFormData.NAME}
-                      onChange={handleTeamFormChange}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-sky-500 focus:border-sky-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end bg-gray-50 dark:bg-slate-700/50 p-4 rounded-b-lg">
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg mr-2 hover:bg-gray-300 transition-colors dark:bg-slate-600 dark:text-slate-300 dark:hover:bg-slate-500"
-                    onClick={() => setShowEditTeamModal(false)}
-                  >
-                    Abbrechen
-                  </button>
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition-colors shadow-md"
-                    onClick={() => {
-                      handleEditTeam();
-                      triggerHapticFeedback('success');
-                    }}
-                  >
-                    <Save className="w-4 h-4 inline mr-1" />
-                    Speichern
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-      
-      {/* Delete Team Modal */}
-      <AnimatePresence>
-        {showDeleteTeamModal && currentTeam && (
-          <>
-            <motion.div
-              className="fixed inset-0 bg-black bg-opacity-50 z-40"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={backdropVariants}
-              onClick={() => setShowDeleteTeamModal(false)}
-            ></motion.div>
-            <motion.div
-              className="fixed inset-0 flex items-center justify-center z-50 p-4"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={modalVariants}
-            >
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full">
-                <div className="flex justify-between items-center border-b dark:border-slate-700 p-4">
-                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Team löschen</h3>
-                  <button
-                    onClick={() => setShowDeleteTeamModal(false)}
-                    className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="p-4">
-                  <p className="text-gray-700 mb-4">
-                    Sind Sie sicher, dass Sie das Team "{currentTeam.NAME}" löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.
-                  </p>
-                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 dark:bg-yellow-900/30 dark:border-yellow-600">
-                    <div className="flex">
-                      <AlertTriangle className="h-5 w-5 text-yellow-400 dark:text-yellow-500 mr-2" />
-                      <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                        Durch das Löschen werden auch alle Zuordnungen von Schülern und Betreuern zu diesem Team aufgehoben.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex justify-end bg-gray-50 dark:bg-slate-700/50 p-4 rounded-b-lg">
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg mr-2 hover:bg-gray-300 transition-colors dark:bg-slate-600 dark:text-slate-300 dark:hover:bg-slate-500"
-                    onClick={() => setShowDeleteTeamModal(false)}
-                  >
-                    Abbrechen
-                  </button>
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors shadow-md"
-                    onClick={() => {
-                      handleDeleteTeam();
-                      triggerHapticFeedback('error');
-                    }}
-                  >
-                    <Trash2 className="w-4 h-4 inline mr-1" />
-                    Löschen
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-      
-      {/* Add Betreuer Modal */}
-      <AnimatePresence>
-        {showAddBetreuerModal && (
-          <>
-            <motion.div
-              className="fixed inset-0 bg-black bg-opacity-50 z-40"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={backdropVariants}
-              onClick={() => setShowAddBetreuerModal(false)}
-            ></motion.div>
-            <motion.div
-              className="fixed inset-0 flex items-center justify-center z-50 p-4"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={modalVariants}
-            >
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full">
-                <div className="flex justify-between items-center border-b dark:border-slate-700 p-4">
-                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Betreuer hinzufügen</h3>
-                  <button
-                    onClick={() => setShowAddBetreuerModal(false)}
-                    className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="p-4">
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                    <input
-                      type="text"
-                      name="NAME"
-                      value={betreuerFormData.NAME}
-                      onChange={handleBetreuerFormChange}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-sky-500 focus:border-sky-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-                      required
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Passwort</label>
-                    <input
-                      type="password"
-                      name="PASSWORT"
-                      value={betreuerFormData.PASSWORT}
-                      onChange={handleBetreuerFormChange}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-sky-500 focus:border-sky-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-                      required
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Rolle</label>
-                    <div className="flex items-center">
-                      <label className="inline-flex items-center mr-4">
-                        <input
-                          type="radio"
-                          name="ROLLE"
-                          value="stationaer"
-                          checked={betreuerFormData.ROLLE === 'stationaer'}
-                          onChange={handleBetreuerFormChange}
-                          className="form-radio h-4 w-4 text-sky-600"
-                        />
-                        <span className="ml-2 text-gray-700 dark:text-slate-300">Stationär</span>
-                      </label>
-                      <label className="inline-flex items-center">
-                        <input
-                          type="radio"
-                          name="ROLLE"
-                          value="laufend"
-                          checked={betreuerFormData.ROLLE === 'laufend'}
-                          onChange={handleBetreuerFormChange}
-                          className="form-radio h-4 w-4 text-sky-600"
-                        />
-                        <span className="ml-2 text-gray-700 dark:text-slate-300">Laufend</span>
-                      </label>
-                    </div>
-                  </div>
-                  
-                  {betreuerFormData.ROLLE === 'stationaer' && (
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Disziplinen zuweisen</label>
-                      <div className="max-h-48 overflow-y-auto border border-gray-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-700">
-                        {disziplinen.map(disziplin => (
-                          <label key={disziplin.DISZIPLINID} className="flex items-center p-2 hover:bg-gray-50 dark:hover:bg-slate-600/50 rounded">
-                            <input
-                              type="checkbox"
-                              checked={selectedDisziplinen.includes(disziplin.DISZIPLINID)}
-                              onChange={(e) => handleDisziplinChange(disziplin.DISZIPLINID, e.target.checked)}
-                              className="form-checkbox h-4 w-4 text-sky-600"
-                            />
-                            <span className="ml-2 text-gray-700 dark:text-slate-300">{disziplin.NAME}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {betreuerFormData.ROLLE === 'laufend' && (
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Teams zuweisen</label>
-                      <div className="max-h-48 overflow-y-auto border border-gray-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-700">
-                        {teams.map(team => (
-                          <label key={team.TEAMID} className="flex items-center p-2 hover:bg-gray-50 dark:hover:bg-slate-600/50 rounded">
-                            <input
-                              type="checkbox"
-                              checked={selectedTeams.includes(team.TEAMID)}
-                              onChange={(e) => handleTeamChange(team.TEAMID, e.target.checked)}
-                              className="form-checkbox h-4 w-4 text-sky-600"
-                            />
-                            <span className="ml-2 text-gray-700 dark:text-slate-300">{team.NAME}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="flex justify-end bg-gray-50 dark:bg-slate-700/50 p-4 rounded-b-lg">
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg mr-2 hover:bg-gray-300 transition-colors dark:bg-slate-600 dark:text-slate-300 dark:hover:bg-slate-500"
-                    onClick={() => setShowAddBetreuerModal(false)}
-                  >
-                    Abbrechen
-                  </button>
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-white bg-sky-600 rounded-lg hover:bg-sky-700 transition-colors shadow-md"
-                    onClick={() => {
-                      // Check if we are editing or adding
-                      if (currentBetreuer && currentBetreuer.BETREUERID) { // Check if currentBetreuer and its ID exist
-                        handleEditBetreuer(); // Call the edit handler
-                      } else {
-                        handleAddBetreuer(); // Call the add handler
-                      }
-                      triggerHapticFeedback('success');
-                    }}
-                  >
-                    <Save className="w-4 h-4 inline mr-1" />
-                    Speichern
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-      
-      {/* Remaining modals for edit/delete betreuer, assign disziplinen/teams, and student modals would follow the same pattern */}
-          {/* Assign Disziplinen Modal - ADDED */}
-    <AnimatePresence>
-      {showAssignDisziplinenModal && currentBetreuer && (
-        <>
-          <motion.div
-            className="fixed inset-0 bg-black bg-opacity-50 z-40"
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            variants={backdropVariants}
-            onClick={() => setShowAssignDisziplinenModal(false)}
-          ></motion.div>
-          <motion.div
-            className="fixed inset-0 flex items-center justify-center z-50 p-4"
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            variants={modalVariants}
-          >
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full">
-              <div className="flex justify-between items-center border-b dark:border-slate-700 p-4">
-                <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Disziplinen zuweisen</h3>
-                <button
-                  onClick={() => setShowAssignDisziplinenModal(false)}
-                  className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="p-4">
-                <p className="text-gray-700 mb-4">
-                  Wählen Sie die Disziplinen für den Betreuer "{currentBetreuer.NAME}" aus.
-                </p>
-                <div className="max-h-64 overflow-y-auto border border-gray-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-700">
-                  {disziplinen.map(disziplin => (
-                    <label key={disziplin.DISZIPLINID} className="flex items-center p-2 hover:bg-gray-50 dark:hover:bg-slate-600/50 rounded">
-                      <input
-                        type="checkbox"
-                        checked={selectedDisziplinen.includes(disziplin.DISZIPLINID)}
-                        onChange={(e) => handleDisziplinChange(disziplin.DISZIPLINID, e.target.checked)}
-                        className="form-checkbox h-4 w-4 text-purple-600"
-                      />
-                      <span className="ml-2 text-gray-700 dark:text-slate-300">{disziplin.NAME}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="flex justify-end bg-gray-50 dark:bg-slate-700/50 p-4 rounded-b-lg">
-                <button
-                  type="button"
-                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg mr-2 hover:bg-gray-300 transition-colors dark:bg-slate-600 dark:text-slate-300 dark:hover:bg-slate-500"
-                  onClick={() => setShowAssignDisziplinenModal(false)}
-                >
-                  Abbrechen
-                </button>
-                <button
-                  type="button"
-                  className="px-4 py-2 text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors shadow-md"
-                  onClick={() => {
-                    handleAssignDisziplinen();
-                    triggerHapticFeedback('success');
-                  }}
-                >
-                  <Save className="w-4 h-4 inline mr-1" />
-                  Speichern
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
-
-    {/* Assign Teams Modal - ADDED */}
-    <AnimatePresence>
-      {showAssignTeamsModal && currentBetreuer && (
-        <>
-          <motion.div
-            className="fixed inset-0 bg-black bg-opacity-50 z-40"
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            variants={backdropVariants}
-            onClick={() => setShowAssignTeamsModal(false)}
-          ></motion.div>
-          <motion.div
-            className="fixed inset-0 flex items-center justify-center z-50 p-4"
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            variants={modalVariants}
-          >
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full">
-              <div className="flex justify-between items-center border-b dark:border-slate-700 p-4">
-                <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Teams zuweisen</h3>
-                <button
-                  onClick={() => setShowAssignTeamsModal(false)}
-                  className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="p-4">
-                <p className="text-gray-700 mb-4">
-                  Wählen Sie die Teams für den Betreuer "{currentBetreuer.NAME}" aus.
-                </p>
-                <div className="max-h-64 overflow-y-auto border border-gray-300 dark:border-slate-600 rounded-lg p-2 bg-white dark:bg-slate-700">
-                  {teams.map(team => (
-                    <label key={team.TEAMID} className="flex items-center p-2 hover:bg-gray-50 dark:hover:bg-slate-600/50 rounded">
-                      <input
-                        type="checkbox"
-                        checked={selectedTeams.includes(team.TEAMID)}
-                        onChange={(e) => handleTeamChange(team.TEAMID, e.target.checked)}
-                        className="form-checkbox h-4 w-4 text-green-600"
-                      />
-                      <span className="ml-2 text-gray-700 dark:text-slate-300">{team.NAME}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="flex justify-end bg-gray-50 dark:bg-slate-700/50 p-4 rounded-b-lg">
-                <button
-                  type="button"
-                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg mr-2 hover:bg-gray-300 transition-colors dark:bg-slate-600 dark:text-slate-300 dark:hover:bg-slate-500"
-                  onClick={() => setShowAssignTeamsModal(false)}
-                >
-                  Abbrechen
-                </button>
-                <button
-                  type="button"
-                  className="px-4 py-2 text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors shadow-md"
-                  onClick={() => {
-                    handleAssignTeams();
-                    triggerHapticFeedback('success');
-                  }}
-                >
-                  <Save className="w-4 h-4 inline mr-1" />
-                  Speichern
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
-      {/* Assign Students Modal */}
-      <AnimatePresence>
-        {showAssignStudentsModal && currentTeam && (
-          <>
-            {console.log('AssignStudentsModal gerendert. currentTeam:', currentTeam, 'Alle Schüler (students state):', students, 'SelectedStudents State:', selectedStudents)}
-            <motion.div
-              className="fixed inset-0 bg-black bg-opacity-50 z-40"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={backdropVariants}
-              onClick={() => setShowAssignStudentsModal(false)}
-            ></motion.div>
-            <motion.div
-              className="fixed inset-0 flex items-center justify-center z-50 p-4"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={modalVariants}
-            >
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-lg w-full flex flex-col" style={{maxHeight: '90vh'}}>
-                <div className="flex justify-between items-center border-b dark:border-slate-700 p-4 sticky top-0 bg-white dark:bg-slate-800 z-10">
-                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Schüler zuweisen</h3>
-                  <button
-                    onClick={() => setShowAssignStudentsModal(false)}
-                    className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="p-4 md:p-5 flex-grow overflow-y-auto">
-                  <div className="mb-4 p-3 bg-sky-50 dark:bg-sky-900/30 rounded-lg border border-sky-200 dark:border-sky-700">
-                    <label className="block text-xs font-medium text-sky-600 dark:text-sky-400 mb-0.5">Team</label>
-                    <p className="text-lg font-semibold text-sky-800 dark:text-sky-200">{currentTeam.NAME}</p>
-                  </div>
-
-                  {/* Filters for students */}
-                  <div className="mb-4 p-3 border dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/30">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label htmlFor="studentSearchInModal" className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">Schüler suchen</label>
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                          <input
-                            type="text"
-                            id="studentSearchInModal"
-                            placeholder="Name suchen..."
-                            value={studentSearchQueryInModal}
-                            onChange={(e) => setStudentSearchQueryInModal(e.target.value)}
-                            className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-sky-500 focus:border-sky-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label htmlFor="classFilterInModal" className="block text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">Klasse filtern</label>
-                        <select
-                          id="classFilterInModal"
-                          value={selectedClassFilterInModal}
-                          onChange={(e) => setSelectedClassFilterInModal(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-sky-500 focus:border-sky-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+        
+        {/* Content based on active tab */}
+        {!loading && !error && (
+          <AnimatePresence mode="wait">
+            {activeTab === 'teams' && (
+              <motion.div 
+                key="teams"
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                variants={pageVariants}
+              >
+                {viewMode === 'card' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {itemsToDisplay.teams.length > 0 ? (
+                      itemsToDisplay.teams.map((team, index) => (
+                        <motion.div
+                          key={team.TEAMID}
+                          variants={cardVariants}
+                          custom={index}
+                          whileHover="hover"
+                          className={`rounded-lg shadow-md overflow-hidden transition-colors duration-300 ${isDarkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white'}`}
                         >
-                          <option value="">Alle Klassen</option>
-                          {uniqueClasses.map(klasse => (
-                            <option key={klasse} value={klasse}>{klasse}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="mb-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Schüler auswählen</label>
-                    <p className="text-xs text-gray-500 dark:text-slate-400">
-                      Es werden Schüler ohne Team oder Schüler, die bereits diesem Team zugewiesen sind, angezeigt.
-                    </p>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 divide-y divide-gray-200 dark:divide-slate-600">
-                    {filteredStudentsForModal.length > 0 ? (
-                      filteredStudentsForModal.map(student => (
-                        <label 
-                          key={student.SCHUELERID} 
-                          className="flex items-center p-3 hover:bg-slate-50 dark:hover:bg-slate-600/50 rounded-sm transition-colors cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedStudents.includes(student.SCHUELERID)}
-                            onChange={(e) => handleStudentChange(student.SCHUELERID, e.target.checked)}
-                            className="form-checkbox h-4 w-4 text-sky-600 focus:ring-sky-500 border-gray-300 dark:border-slate-500 rounded"
-                          />
-                          <span className="ml-3 text-sm text-gray-700 dark:text-slate-300">
-                            {student.VORNAME} {student.NACHNAME} ({student.KLASSE || 'N/A'})
-                            {student.TEAMID && student.TEAMID !== currentTeam?.TEAMID && (
-                              <span className="ml-2 text-xs text-orange-500">(Team: {getTeamName(student.TEAMID)})</span>
-                            )}
-                          </span>
-                        </label>
+                          <div className={`p-4 border-b ${isDarkMode ? 'border-slate-700' : 'border-gray-200'}`}>
+                            <h3 className={`text-lg font-semibold truncate ${isDarkMode ? 'text-slate-100' : 'text-gray-900'}`}>{team.NAME}</h3>
+                            <p className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-600'}`}>ID: {team.TEAMID}</p>
+                          </div>
+                          <div className="p-4">
+                            <div className="mb-2">
+                              <p className={`text-sm font-medium ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>Schüler</p>
+                              <p className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-600'}`}>
+                                {students.filter(s => s.TEAMID === team.TEAMID).length || 0} Mitglieder
+                              </p>
+                            </div>
+                          </div>
+                          {isAdmin() && ( 
+                            <div className={`px-4 py-3 flex justify-end gap-2 ${isDarkMode ? 'bg-slate-800 border-t border-slate-700' : 'bg-gray-50'}`}>
+                              <button
+                                onClick={() => {
+                                  openAssignStudentsModal(team);
+                                  triggerHapticFeedback('light');
+                                }}
+                                className={`p-2 rounded-md transition-colors ${isDarkMode ? 'text-sky-400 hover:bg-sky-700/50' : 'text-blue-600 hover:bg-blue-100'}`}
+                                aria-label="Schüler zuweisen"
+                                title="Schüler zuweisen"
+                              >
+                                <UserPlus className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  openEditTeamModal(team);
+                                  triggerHapticFeedback('light');
+                                }}
+                                className={`p-2 rounded-md transition-colors ${isDarkMode ? 'text-amber-400 hover:bg-amber-700/50' : 'text-amber-600 hover:bg-amber-100'}`}
+                                aria-label="Team bearbeiten"
+                                title="Team bearbeiten"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  openDeleteTeamModal(team);
+                                  triggerHapticFeedback('light');
+                                }}
+                                className={`p-2 rounded-md transition-colors ${isDarkMode ? 'text-red-400 hover:bg-red-700/50' : 'text-red-600 hover:bg-red-100'}`}
+                                aria-label="Team löschen"
+                                title="Team löschen"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </motion.div>
                       ))
                     ) : (
-                      <p className="text-sm text-center text-gray-500 dark:text-slate-400 py-4">
-                        Keine Schüler entsprechen den Filtern oder keine Schüler vorhanden.
-                      </p>
+                      <div className={`col-span-full text-center py-12 ${isDarkMode ? 'text-slate-500' : 'text-gray-500'}`}>
+                        Keine Teams gefunden oder zugewiesen.
+                      </div>
                     )}
                   </div>
-                </div>
-                <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-700/50 p-4 border-t dark:border-slate-700 sticky bottom-0 z-10 rounded-b-lg">
-                  <span className="text-sm text-slate-600 dark:text-slate-400">
-                    <strong className="text-slate-800 dark:text-slate-200">{selectedStudents.length}</strong> Schüler ausgewählt
-                  </span>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-200 dark:bg-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors"
-                      onClick={() => setShowAssignStudentsModal(false)}
-                    >
-                      Abbrechen
-                    </button>
-                    <button
-                      type="button"
-                      className="px-4 py-2 text-sm font-medium text-white bg-sky-600 rounded-lg hover:bg-sky-700 transition-colors shadow-sm flex items-center gap-1.5"
-                      onClick={() => {
-                        handleAssignStudents();
-                        triggerHapticFeedback('success');
-                      }}
-                    >
-                      <Save className="w-4 h-4" />
-                      Speichern
-                    </button>
+                ) : (
+                  <div className={`rounded-lg shadow overflow-hidden ${isDarkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white'}`}>
+                    <table className={`min-w-full divide-y ${isDarkMode ? 'divide-slate-700' : 'divide-gray-200'}`}>
+                      <thead className={`${isDarkMode ? 'bg-slate-700/50' : 'bg-gray-50'}`}>
+                        <tr>
+                          <th
+                            scope="col"
+                            className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer ${isDarkMode ? 'text-slate-300' : 'text-gray-500'}`}
+                            onClick={() => toggleSort('name')}
+                          >
+                            <div className="flex items-center">
+                              Team Name
+                              {sortBy === 'name' && (
+                                <ArrowUpDown className="ml-1 w-4 h-4" />
+                              )}
+                            </div>
+                          </th>
+                          <th scope="col" className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-slate-300' : 'text-gray-500'}`}>
+                            Anzahl Schüler
+                          </th>
+                          <th scope="col" className={`px-6 py-3 text-right text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-slate-300' : 'text-gray-500'}`}>
+                            Aktionen
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className={`${isDarkMode ? 'bg-slate-800 divide-slate-700' : 'bg-white divide-gray-200'}`}>
+                        {itemsToDisplay.teams.length > 0 ? (
+                          itemsToDisplay.teams.map((team, index) => (
+                            <motion.tr 
+                              key={team.TEAMID}
+                              variants={itemVariants}
+                              custom={index}
+                              className={`${isDarkMode ? 'hover:bg-slate-700/60' : 'hover:bg-gray-50/50'} transition-colors`}
+                            >
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className={`text-sm font-medium ${isDarkMode ? 'text-slate-100' : 'text-gray-900'}`}>{team.NAME}</div>
+                                <div className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>ID: {team.TEAMID}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className={`text-sm ${isDarkMode ? 'text-slate-200' : 'text-gray-900'}`}>
+                                  {students.filter(s => s.TEAMID === team.TEAMID).length || 0} Mitglieder
+                                </div>
+                              </td>
+                              {isAdmin() && ( 
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                  <button
+                                    onClick={() => {
+                                      openAssignStudentsModal(team);
+                                      triggerHapticFeedback('light');
+                                    }}
+                                    className={`mr-3 ${isDarkMode ? 'text-sky-400 hover:text-sky-300' : 'text-blue-600 hover:text-blue-900'}`}
+                                  >
+                                    <UserPlus className="w-4 h-4 inline" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      openEditTeamModal(team);
+                                      triggerHapticFeedback('light');
+                                    }}
+                                    className={`mr-3 ${isDarkMode ? 'text-amber-400 hover:text-amber-300' : 'text-amber-600 hover:text-amber-900'}`}
+                                  >
+                                    <Edit className="w-4 h-4 inline" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      openDeleteTeamModal(team);
+                                      triggerHapticFeedback('light');
+                                    }}
+                                    className={`${isDarkMode ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-900'}`}
+                                  >
+                                    <Trash2 className="w-4 h-4 inline" />
+                                  </button>
+                                </td>
+                              )}
+                            </motion.tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="3" className={`px-6 py-4 text-center text-sm ${isDarkMode ? 'text-slate-500' : 'text-gray-500'}`}>
+                              Keine Teams gefunden oder zugewiesen.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
-                </div>
+                )}
+              </motion.div>
+            )}
+            
+            {activeTab === 'betreuer' && (
+              <motion.div 
+                key="betreuer"
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                variants={pageVariants}
+              >
+                {viewMode === 'card' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {itemsToDisplay.betreuer.length > 0 ? (
+                      itemsToDisplay.betreuer.map((b, index) => ( 
+                        <motion.div
+                          key={b.BETREUERID}
+                          variants={cardVariants}
+                          custom={index}
+                          whileHover="hover"
+                          className={`rounded-lg shadow-md overflow-hidden transition-colors duration-300 ${isDarkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white'}`}
+                        >
+                          <div className={`p-4 border-b ${isDarkMode ? 'border-slate-700' : 'border-gray-200'}`}>
+                            <h3 className={`text-lg font-semibold truncate ${isDarkMode ? 'text-slate-100' : 'text-gray-900'}`}>{b.NAME}</h3>
+                            <div className="flex items-center mt-1">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isDarkMode 
+                                ? (b.ROLLE === 'stationaer' ? 'bg-purple-700/30 text-purple-300' : 'bg-green-700/30 text-green-300')
+                                : (b.ROLLE === 'stationaer' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800')
+                              }`}>
+                                {b.ROLLE === 'stationaer' ? (
+                                  <MapPin className="w-3 h-3 mr-1" />
+                                ) : (
+                                  <Map className="w-3 h-3 mr-1" />
+                                )}
+                                {getBetreuerRolleLabel(b.ROLLE)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="p-4">
+                            {b.ROLLE === 'stationaer' ? (
+                              <div className="mb-2">
+                                <p className={`text-sm font-medium ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>Zugewiesene Disziplinen</p>
+                                <p className={`text-sm truncate ${isDarkMode ? 'text-slate-400' : 'text-gray-600'}`}>
+                                  {b.disziplinen?.length > 0 
+                                    ? b.disziplinen.map(d => getDisziplinName(d.DISZIPLINID) || `ID ${d.DISZIPLINID}`).join(', ')
+                                    : 'Keine Disziplinen zugewiesen'}
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="mb-2">
+                                <p className={`text-sm font-medium ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>Zugewiesene Teams</p>
+                                <p className={`text-sm truncate ${isDarkMode ? 'text-slate-400' : 'text-gray-600'}`}>
+                                  {b.teams?.length > 0 
+                                    ? b.teams.map(t => getTeamName(t.TEAMID) || `ID ${t.TEAMID}`).join(', ')
+                                    : 'Keine Teams zugewiesen'}
+                                </p>
+                              </div>
+                            )}
+                            
+                            {isAdmin() && ( 
+                              <div className="mt-3 flex items-center">
+                                <button
+                                  onClick={() => setShowPasswords(prev => ({...prev, [b.BETREUERID]: !prev[b.BETREUERID]}))}
+                                  className={`mr-2 ${isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-gray-600 hover:text-gray-900'}`}
+                                >
+                                  {showPasswords[b.BETREUERID] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                                <p className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>
+                                  {showPasswords[b.BETREUERID] ? (b.PASSWORT || '*****') : '*****'}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                          {isAdmin() && ( 
+                            <div className={`px-4 py-3 flex justify-end gap-2 ${isDarkMode ? 'bg-slate-800 border-t border-slate-700' : 'bg-gray-50'}`}>
+                              {b.ROLLE === 'stationaer' ? (
+                                <button
+                                  onClick={() => {
+                                    openAssignDisziplinenModal(b);
+                                    triggerHapticFeedback('light');
+                                  }}
+                                  className={`p-2 rounded ${isDarkMode ? 'text-purple-400 hover:bg-purple-700/50' : 'text-purple-600 hover:bg-purple-100'}`}
+                                  aria-label="Disziplinen zuweisen"
+                                >
+                                  <Layers className="w-4 h-4" />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    openAssignTeamsModal(b);
+                                    triggerHapticFeedback('light');
+                                  }}
+                                  className={`p-2 rounded ${isDarkMode ? 'text-green-400 hover:bg-green-700/50' : 'text-green-600 hover:bg-green-100'}`}
+                                  aria-label="Teams zuweisen"
+                                >
+                                  <Users className="w-4 h-4" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => {
+                                  openBetreuerFormModal(true, b);
+                                  triggerHapticFeedback('light');
+                                }}
+                                className={`p-2 rounded ${isDarkMode ? 'text-amber-400 hover:bg-amber-700/50' : 'text-amber-600 hover:bg-amber-100'}`}
+                                aria-label="Betreuer bearbeiten"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  openDeleteBetreuerModal(b);
+                                  triggerHapticFeedback('light');
+                                }}
+                                className={`p-2 rounded ${isDarkMode ? 'text-red-400 hover:bg-red-700/50' : 'text-red-600 hover:bg-red-100'}`}
+                                aria-label="Betreuer löschen"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </motion.div>
+                      ))
+                    ) : (
+                      <div className={`col-span-full text-center py-12 ${isDarkMode ? 'text-slate-500' : 'text-gray-500'}`}>
+                        Keine Betreuer gefunden oder zugewiesen.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className={`rounded-lg shadow overflow-hidden ${isDarkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white'}`}>
+                    <table className={`min-w-full divide-y ${isDarkMode ? 'divide-slate-700' : 'divide-gray-200'}`}>
+                      <thead className={`${isDarkMode ? 'bg-slate-700/50' : 'bg-gray-50'}`}>
+                        <tr>
+                          <th
+                            scope="col"
+                            className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer ${isDarkMode ? 'text-slate-300' : 'text-gray-500'}`}
+                            onClick={() => toggleSort('name')}
+                          >
+                            <div className="flex items-center">
+                              Name
+                              {sortBy === 'name' && (
+                                <ArrowUpDown className="ml-1 w-4 h-4" />
+                              )}
+                            </div>
+                          </th>
+                          <th
+                            scope="col"
+                            className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer ${isDarkMode ? 'text-slate-300' : 'text-gray-500'}`}
+                            onClick={() => toggleSort('rolle')}
+                          >
+                            <div className="flex items-center">
+                              Rolle
+                              {sortBy === 'rolle' && (
+                                <ArrowUpDown className="ml-1 w-4 h-4" />
+                              )}
+                            </div>
+                          </th>
+                          <th scope="col" className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-slate-300' : 'text-gray-500'}`}>
+                            Zuweisungen
+                          </th>
+                          <th scope="col" className={`px-6 py-3 text-right text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-slate-300' : 'text-gray-500'}`}>
+                            Aktionen
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className={`${isDarkMode ? 'bg-slate-800 divide-slate-700' : 'bg-white divide-gray-200'}`}>
+                        {itemsToDisplay.betreuer.length > 0 ? (
+                          itemsToDisplay.betreuer.map((b, index) => ( 
+                            <motion.tr 
+                              key={b.BETREUERID}
+                              variants={itemVariants}
+                              custom={index}
+                              className={`${isDarkMode ? 'hover:bg-slate-700/60' : 'hover:bg-gray-50/50'} transition-colors`}
+                            >
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className={`text-sm font-medium ${isDarkMode ? 'text-slate-100' : 'text-gray-900'}`}>{b.NAME}</div>
+                                <div className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>ID: {b.BETREUERID}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isDarkMode 
+                                  ? (b.ROLLE === 'stationaer' ? 'bg-purple-700/30 text-purple-300' : 'bg-green-700/30 text-green-300')
+                                  : (b.ROLLE === 'stationaer' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800')
+                                }`}>
+                                  {b.ROLLE === 'stationaer' ? <MapPin size={14} className="mr-1"/> : <Map size={14} className="mr-1"/>}
+                                  {getBetreuerRolleLabel(b.ROLLE)}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className={`text-sm ${isDarkMode ? 'text-slate-200' : 'text-gray-900'}`}>
+                                  {b.ROLLE === 'stationaer' 
+                                    ? `${b.disziplinen?.length || 0} Disziplin(en)`
+                                    : `${b.teams?.length || 0} Team(s)`}
+                                </div>
+                                <div className={`text-xs truncate max-w-xs ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>
+                                  {b.ROLLE === 'stationaer' 
+                                    ? (b.disziplinen?.map(d => d.NAME).join(', ') || 'Keine')
+                                    : (b.teams?.map(t => t.NAME).join(', ') || 'Keine')}
+                                </div>
+                              </td>
+                              {isAdmin() && ( 
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                  <button 
+                                    onClick={() => {
+                                      openBetreuerFormModal(true, b);
+                                      triggerHapticFeedback('light'); // Added haptic feedback
+                                    }}
+                                    className={`p-1.5 rounded-md transition-colors ${isDarkMode ? 'text-sky-400 hover:bg-sky-700/50' : 'text-sky-600 hover:bg-sky-100'}`} 
+                                    title="Bearbeiten & Zuweisen"
+                                  >
+                                    <Settings size={16} />
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      openDeleteBetreuerModal(b);
+                                      triggerHapticFeedback('light'); // Added haptic feedback
+                                    }}
+                                    className={`p-1.5 rounded-md transition-colors ${isDarkMode ? 'text-red-400 hover:bg-red-700/50' : 'text-red-600 hover:bg-red-100'}`} 
+                                    title="Löschen"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </td>
+                              )}
+                            </motion.tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={isAdmin() ? 4 : 3} className={`px-6 py-10 text-center text-sm italic ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Keine Betreuer gefunden.</td> 
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {activeTab === 'students' && (
+              <motion.div 
+                key="students"
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                variants={pageVariants}
+              >
+                {viewMode === 'card' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {itemsToDisplay.students.length > 0 ? (
+                      itemsToDisplay.students.map((student, index) => (
+                        <motion.div
+                          key={student.SCHUELERID}
+                          variants={cardVariants}
+                          custom={index}
+                          whileHover="hover"
+                          className={`rounded-lg shadow-md overflow-hidden transition-colors duration-300 ${isDarkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white'}`}
+                        >
+                          <div className={`p-4 border-b ${isDarkMode ? 'border-slate-700' : 'border-gray-200'}`}>
+                            <h3 className={`text-lg font-semibold truncate ${isDarkMode ? 'text-slate-100' : 'text-gray-900'}`}>{student.VORNAME} {student.NACHNAME}</h3>
+                            <p className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-600'}`}>Klasse: {student.KLASSE || 'Nicht zugewiesen'}</p>
+                          </div>
+                          <div className="p-4">
+                            <div className="mb-2">
+                              <p className={`text-sm font-medium ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>Team</p>
+                              <p className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-600'}`}>{getTeamName(student.TEAMID)}</p>
+                            </div>
+                            <div className="mb-2">
+                              <p className={`text-sm font-medium ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>Geburtsdatum</p>
+                              <p className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-600'}`}>{student.GEBURTSDATUM || 'Nicht angegeben'}</p>
+                            </div>
+                            <div className="mb-2">
+                              <p className={`text-sm font-medium ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>Geschlecht</p>
+                              <p className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-600'}`}>{student.GESCHLECHT || 'Nicht angegeben'}</p>
+                            </div>
+                          </div>
+                          {isAdmin() && ( 
+                            <div className={`px-4 py-3 flex justify-end gap-2 ${isDarkMode ? 'bg-slate-800 border-t border-slate-700' : 'bg-gray-50'}`}>
+                              <button
+                                onClick={() => {
+                                  openEditStudentModal(student);
+                                  triggerHapticFeedback('light');
+                                }}
+                                className={`p-2 rounded ${isDarkMode ? 'text-amber-400 hover:bg-amber-700/50' : 'text-amber-600 hover:bg-amber-100'}`}
+                                aria-label="Schüler bearbeiten"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  openDeleteStudentModal(student);
+                                  triggerHapticFeedback('light');
+                                }}
+                                className={`p-2 rounded ${isDarkMode ? 'text-red-400 hover:bg-red-700/50' : 'text-red-600 hover:bg-red-100'}`}
+                                aria-label="Schüler löschen"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </motion.div>
+                      ))
+                    ) : (
+                      <div className={`col-span-full text-center py-12 ${isDarkMode ? 'text-slate-500' : 'text-gray-500'}`}>
+                        Keine Schüler gefunden oder zugewiesen.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className={`rounded-lg shadow overflow-hidden ${isDarkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white'}`}>
+                    <table className={`min-w-full divide-y ${isDarkMode ? 'divide-slate-700' : 'divide-gray-200'}`}>
+                      <thead className={`${isDarkMode ? 'bg-slate-700/50' : 'bg-gray-50'}`}>
+                        <tr>
+                          <th
+                            scope="col"
+                            className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer ${isDarkMode ? 'text-slate-300' : 'text-gray-500'}`}
+                            onClick={() => toggleSort('name')}
+                          >
+                            <div className="flex items-center">
+                              Name
+                              {sortBy === 'name' && (
+                                <ArrowUpDown className="ml-1 w-4 h-4" />
+                              )}
+                            </div>
+                          </th>
+                          <th
+                            scope="col"
+                            className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer ${isDarkMode ? 'text-slate-300' : 'text-gray-500'}`}
+                            onClick={() => toggleSort('klasse')}
+                          >
+                            <div className="flex items-center">
+                              Klasse
+                              {sortBy === 'klasse' && (
+                                <ArrowUpDown className="ml-1 w-4 h-4" />
+                              )}
+                            </div>
+                          </th>
+                          <th
+                            scope="col"
+                            className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider cursor-pointer ${isDarkMode ? 'text-slate-300' : 'text-gray-500'}`}
+                            onClick={() => toggleSort('team')}
+                          >
+                            <div className="flex items-center">
+                              Team
+                              {sortBy === 'team' && (
+                                <ArrowUpDown className="ml-1 w-4 h-4" />
+                              )}
+                            </div>
+                          </th>
+                          <th scope="col" className={`px-6 py-3 text-right text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-slate-300' : 'text-gray-500'}`}>
+                            Aktionen
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className={`${isDarkMode ? 'bg-slate-800 divide-slate-700' : 'bg-white divide-gray-200'}`}>
+                        {itemsToDisplay.students.length > 0 ? (
+                          itemsToDisplay.students.map((student, index) => (
+                            <motion.tr 
+                              key={student.SCHUELERID}
+                              variants={itemVariants}
+                              custom={index}
+                              className={`${isDarkMode ? 'hover:bg-slate-700/60' : 'hover:bg-gray-50/50'} transition-colors`}
+                            >
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className={`text-sm font-medium ${isDarkMode ? 'text-slate-100' : 'text-gray-900'}`}>{student.VORNAME} {student.NACHNAME}</div>
+                                <div className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>ID: {student.SCHUELERID}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className={`text-sm ${isDarkMode ? 'text-slate-200' : 'text-gray-900'}`}>{student.KLASSE || 'Nicht zugewiesen'}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className={`text-sm ${isDarkMode ? 'text-slate-200' : 'text-gray-900'}`}>{getTeamName(student.TEAMID)}</div>
+                              </td>
+                              {isAdmin() && ( 
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                  <button
+                                    onClick={() => {
+                                      openEditStudentModal(student);
+                                      triggerHapticFeedback('light');
+                                    }}
+                                    className={`mr-3 ${isDarkMode ? 'text-amber-400 hover:text-amber-300' : 'text-amber-600 hover:text-amber-900'}`}
+                                  >
+                                    <Edit className="w-4 h-4 inline" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      openDeleteStudentModal(student);
+                                      triggerHapticFeedback('light');
+                                    }}
+                                    className={`${isDarkMode ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-900'}`}
+                                  >
+                                    <Trash2 className="w-4 h-4 inline" />
+                                  </button>
+                                </td>
+                              )}
+                            </motion.tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="4" className={`px-6 py-4 text-center text-sm ${isDarkMode ? 'text-slate-500' : 'text-gray-500'}`}>
+                              Keine Schüler gefunden oder zugewiesen.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
+      </div>
+
+      {/* Modals */}
+      <AnimatePresence>
+        {/* Add Team Modal */}
+        {showAddTeamModal && (
+          <motion.div
+            variants={backdropVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isDarkMode ? 'bg-black/80 backdrop-blur-sm' : 'bg-black/50'}`}
+            onClick={() => setShowAddTeamModal(false)}
+          >
+            <motion.div
+              variants={modalVariants}
+              className={`p-6 rounded-xl shadow-2xl w-full max-w-md ${isDarkMode ? 'bg-slate-800 text-slate-100 border border-slate-700' : 'bg-white text-slate-900'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal content for Add Team */}
+              <div className={`flex justify-between items-center pb-3 mb-4 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+                <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`}>Team hinzufügen</h3>
+                <button
+                  className={`${isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'} transition-colors`}
+                  onClick={() => setShowAddTeamModal(false)}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              {/* Add Team Form */}
+              <div className="mt-4">
+                <label htmlFor="teamName" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Team Name</label>
+                <input
+                  id="teamName"
+                  name="NAME"
+                  type="text"
+                  placeholder="Name des Teams"
+                  value={teamFormData.NAME}
+                  onChange={handleTeamFormChange}
+                  className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
+                />
+              </div>
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                    ${isDarkMode 
+                      ? 'bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600' 
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                    }`}
+                  onClick={() => setShowAddTeamModal(false)}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  className={`px-4 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-opacity-50
+                    ${isDarkMode ? 'bg-sky-500 hover:bg-sky-400' : 'bg-sky-600 hover:bg-sky-700'}`}
+                  onClick={handleAddTeam}
+                >
+                  Team hinzufügen
+                </button>
               </div>
             </motion.div>
-          </>
+          </motion.div>
         )}
-      </AnimatePresence>
-      
-      {/* Delete Betreuer Modal - ADDED */}
-      <AnimatePresence>
+        {/* Edit Team Modal */}
+        {showEditTeamModal && currentTeam && (
+          <motion.div
+            variants={backdropVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isDarkMode ? 'bg-black/80 backdrop-blur-sm' : 'bg-black/50'}`}
+            onClick={() => setShowEditTeamModal(false)}
+          >
+            <motion.div
+              variants={modalVariants}
+              className={`p-6 rounded-xl shadow-2xl w-full max-w-md ${isDarkMode ? 'bg-slate-800 text-slate-100 border border-slate-700' : 'bg-white text-slate-900'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal content for Edit Team */}
+              <div className={`flex justify-between items-center pb-3 mb-4 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+                <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`}>Team bearbeiten</h3>
+                <button
+                  className={`${isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'} transition-colors`}
+                  onClick={() => setShowEditTeamModal(false)}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              {/* Edit Team Form */}
+              <div className="mt-4">
+                <label htmlFor="editTeamName" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Team Name</label>
+                <input
+                  id="editTeamName"
+                  name="NAME" // Ensure name attribute is present for form handling if used
+                  type="text"
+                  placeholder="Name des Teams"
+                  value={teamFormData.NAME}
+                  onChange={handleTeamFormChange}
+                  className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
+                />
+              </div>
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                    ${isDarkMode 
+                      ? 'bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600' 
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                    }`}
+                  onClick={() => setShowEditTeamModal(false)}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  className={`px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-sky-500 hover:bg-sky-400 focus:ring-sky-500' 
+                      : 'bg-sky-600 hover:bg-sky-700 focus:ring-sky-600'
+                    }`}
+                  onClick={handleEditTeam}
+                >
+                  Team aktualisieren
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+        {/* Delete Team Modal */}
+        {showDeleteTeamModal && currentTeam && (
+          <motion.div
+            variants={backdropVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isDarkMode ? 'bg-black/80 backdrop-blur-sm' : 'bg-black/50'}`}
+            onClick={() => setShowDeleteTeamModal(false)}
+          >
+            <motion.div
+              variants={modalVariants}
+              className={`p-6 rounded-xl shadow-2xl w-full max-w-md ${isDarkMode ? 'bg-slate-800 text-slate-100 border border-slate-700' : 'bg-white text-slate-900'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal content for Delete Team */}
+              <div className={`flex justify-between items-center pb-3 mb-4 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+                <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-red-500' : 'text-red-600'}`}>Team löschen</h3>
+                <button
+                  className={`${isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'} transition-colors`}
+                  onClick={() => setShowDeleteTeamModal(false)}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className={`${isDarkMode ? 'text-slate-300' : 'text-slate-600'} text-sm mb-1`}>
+                Sind Sie sicher, dass Sie das Team "<strong>{currentTeam.NAME}</strong>" löschen möchten?
+              </p>
+              <p className={`${isDarkMode ? 'text-red-400' : 'text-red-500'} text-xs font-semibold`}>
+                Diese Aktion kann nicht rückgängig gemacht werden.
+              </p>
+              <div className="mt-6 flex justify-end space-x-3">
+                 <button
+                  type="button"
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                    ${isDarkMode 
+                      ? 'bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600' 
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                    }`}
+                  onClick={() => setShowDeleteTeamModal(false)}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  className={`px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-red-600 hover:bg-red-500 focus:ring-red-600' 
+                      : 'bg-red-500 hover:bg-red-600 focus:ring-red-500' 
+                    }`}
+                  onClick={handleDeleteTeam}
+                >
+                  Team löschen
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+        {/* Add/Edit Betreuer Modal (Unified) */}
+        {showAddBetreuerModal && (
+          <motion.div
+            variants={backdropVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isDarkMode ? 'bg-black/80 backdrop-blur-sm' : 'bg-black/50'}`}
+            onClick={() => setShowAddBetreuerModal(false)}
+          >
+            <motion.div
+              variants={modalVariants}
+              className={`p-6 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col ${isDarkMode ? 'bg-slate-800 text-slate-100 border border-slate-700' : 'bg-white text-slate-900'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal content for Add/Edit Betreuer */}
+              <div className={`flex justify-between items-center pb-3 mb-4 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+                <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`}>
+                  {currentBetreuer ? 'Betreuer bearbeiten' : 'Betreuer hinzufügen'}
+                </h3>
+                <button
+                  className={`${isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'} transition-colors`}
+                  onClick={() => setShowAddBetreuerModal(false)}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              {/* Betreuer Form */}
+              <div className="space-y-4 flex-grow overflow-y-auto pr-2 -mr-2 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-800">
+                <div>
+                  <label htmlFor="betreuerName" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Name</label>
+                  <input
+                    id="betreuerName"
+                    name="NAME"
+                    type="text"
+                    placeholder="Name des Betreuers"
+                    value={betreuerFormData.NAME}
+                    onChange={handleBetreuerFormChange}
+                    className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="betreuerPasswort" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Passwort {currentBetreuer && "(Leer lassen für keine Änderung)"}</label>
+                  <input
+                    id="betreuerPasswort"
+                    name="PASSWORT"
+                    type="password"
+                    placeholder="••••••••"
+                    value={betreuerFormData.PASSWORT}
+                    onChange={handleBetreuerFormChange}
+                    className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="betreuerRolle" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Rolle</label>
+                  <select
+                    id="betreuerRolle"
+                    name="ROLLE"
+                    value={betreuerFormData.ROLLE}
+                    onChange={handleBetreuerFormChange}
+                    className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50 appearance-none
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
+                  >
+                    <option value="stationaer">Stationär</option>
+                    <option value="laufend">Laufend</option>
+                  </select>
+                </div>
+
+                {betreuerFormData.ROLLE === 'stationaer' && (
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Disziplinen zuweisen</label>
+                    <div className={`max-h-40 overflow-y-auto space-y-1 p-2 rounded-md border ${isDarkMode ? 'border-slate-600 bg-slate-700/30' : 'border-slate-200 bg-slate-50/50'}`}>
+                      {disziplinen.map(disziplin => (
+                        <label key={disziplin.DISZIPLINID} className={`flex items-center p-2 rounded-md cursor-pointer transition-colors ${selectedDisziplinen.includes(disziplin.DISZIPLINID) ? (isDarkMode ? 'bg-sky-600 hover:bg-sky-500' : 'bg-sky-100 hover:bg-sky-200') : (isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-100') }`}>
+                          <input
+                            type="checkbox"
+                            checked={selectedDisziplinen.includes(disziplin.DISZIPLINID)}
+                            onChange={(e) => handleDisziplinChange(disziplin.DISZIPLINID, e.target.checked)}
+                            className="form-checkbox h-4 w-4 text-sky-600 dark:text-sky-500 bg-slate-300 dark:bg-slate-600 border-slate-400 dark:border-slate-500 rounded focus:ring-sky-500 dark:focus:ring-sky-600 focus:ring-offset-0 dark:focus:ring-offset-slate-800 transition duration-150 ease-in-out mr-2"
+                          />
+                          <span className={`${isDarkMode ? 'text-slate-200' : 'text-slate-700'} text-sm`}>{disziplin.NAME}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {betreuerFormData.ROLLE === 'laufend' && (
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Teams zuweisen</label>
+                    <div className={`max-h-40 overflow-y-auto space-y-1 p-2 rounded-md border ${isDarkMode ? 'border-slate-600 bg-slate-700/30' : 'border-slate-200 bg-slate-50/50'}`}>
+                      {teams.map(team => (
+                        <label key={team.TEAMID} className={`flex items-center p-2 rounded-md cursor-pointer transition-colors ${selectedTeams.includes(team.TEAMID) ? (isDarkMode ? 'bg-sky-600 hover:bg-sky-500' : 'bg-sky-100 hover:bg-sky-200') : (isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-100') }`}>
+                          <input
+                            type="checkbox"
+                            checked={selectedTeams.includes(team.TEAMID)}
+                            onChange={(e) => handleTeamChange(team.TEAMID, e.target.checked)}
+                            className="form-checkbox h-4 w-4 text-sky-600 dark:text-sky-500 bg-slate-300 dark:bg-slate-600 border-slate-400 dark:border-slate-500 rounded focus:ring-sky-500 dark:focus:ring-sky-600 focus:ring-offset-0 dark:focus:ring-offset-slate-800 transition duration-150 ease-in-out mr-2"
+                          />
+                          <span className={`${isDarkMode ? 'text-slate-200' : 'text-slate-700'} text-sm`}>{team.NAME}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="mt-6 pt-4 border-t flex justify-end space-x-3 ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}">
+                <button
+                  type="button"
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                    ${isDarkMode 
+                      ? 'bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600' 
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                    }`}
+                  onClick={() => setShowAddBetreuerModal(false)}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  className={`px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-sky-500 hover:bg-sky-400 focus:ring-sky-500' 
+                      : 'bg-sky-600 hover:bg-sky-700 focus:ring-sky-600'
+                    }`}
+                  onClick={currentBetreuer ? handleEditBetreuer : handleAddBetreuer} // Updated logic for unified modal
+                >
+                  {currentBetreuer ? 'Betreuer aktualisieren' : 'Betreuer hinzufügen'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+        {/* Delete Betreuer Modal */}
         {showDeleteBetreuerModal && currentBetreuer && (
-          <>
+          <motion.div
+            variants={backdropVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isDarkMode ? 'bg-black/80 backdrop-blur-sm' : 'bg-black/50'}`}
+            onClick={() => setShowDeleteBetreuerModal(false)}
+          >
             <motion.div
-              className="fixed inset-0 bg-black bg-opacity-50 z-40"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={backdropVariants}
-              onClick={() => setShowDeleteBetreuerModal(false)}
-            ></motion.div>
-            <motion.div
-              className="fixed inset-0 flex items-center justify-center z-50 p-4"
-              initial="initial"
-              animate="animate"
-              exit="exit"
               variants={modalVariants}
+              className={`p-6 rounded-xl shadow-2xl w-full max-w-md ${isDarkMode ? 'bg-slate-800 text-slate-100 border border-slate-700' : 'bg-white text-slate-900'}`}
+              onClick={(e) => e.stopPropagation()}
             >
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full">
-                <div className="flex justify-between items-center border-b dark:border-slate-700 p-4">
-                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Betreuer löschen</h3>
-                  <button
-                    onClick={() => setShowDeleteBetreuerModal(false)}
-                    className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="p-4">
-                  <p className="text-gray-700 mb-4">
-                    Sind Sie sicher, dass Sie den Betreuer "{currentBetreuer.NAME}" löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.
-                  </p>
-                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 dark:bg-yellow-900/30 dark:border-yellow-600">
-                    <div className="flex">
-                      <AlertTriangle className="h-5 w-5 text-yellow-400 dark:text-yellow-500 mr-2" />
-                      <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                        Durch das Löschen werden auch alle Zuordnungen dieses Betreuers aufgehoben.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex justify-end bg-gray-50 dark:bg-slate-700/50 p-4 rounded-b-lg">
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg mr-2 hover:bg-gray-300 transition-colors dark:bg-slate-600 dark:text-slate-300 dark:hover:bg-slate-500"
-                    onClick={() => setShowDeleteBetreuerModal(false)}
-                  >
-                    Abbrechen
-                  </button>
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors shadow-md"
-                    onClick={() => {
-                      handleDeleteBetreuer();
-                      triggerHapticFeedback('error');
-                    }}
-                  >
-                    <Trash2 className="w-4 h-4 inline mr-1" />
-                    Löschen
-                  </button>
-                </div>
+              {/* Modal content for Delete Betreuer */}
+              <div className={`flex justify-between items-center pb-3 mb-4 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+                <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-red-500' : 'text-red-600'}`}>Betreuer löschen</h3>
+                <button
+                  className={`${isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'} transition-colors`}
+                  onClick={() => setShowDeleteBetreuerModal(false)}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className={`${isDarkMode ? 'text-slate-300' : 'text-slate-600'} text-sm mb-1`}>
+                Sind Sie sicher, dass Sie den Betreuer "<strong>{currentBetreuer.NAME}</strong>" löschen möchten?
+              </p>
+              <p className={`${isDarkMode ? 'text-red-400' : 'text-red-500'} text-xs font-semibold`}>
+                Diese Aktion kann nicht rückgängig gemacht werden.
+              </p>
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                    ${isDarkMode 
+                      ? 'bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600' 
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                    }`}
+                  onClick={() => setShowDeleteBetreuerModal(false)}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  className={`px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-red-600 hover:bg-red-500 focus:ring-red-600' 
+                      : 'bg-red-500 hover:bg-red-600 focus:ring-red-500' 
+                    }`}
+                  onClick={handleDeleteBetreuer}
+                >
+                  Betreuer löschen
+                </button>
               </div>
             </motion.div>
-          </>
+          </motion.div>
         )}
-      </AnimatePresence>
-
-      {/* Add Student Modal - ADDED */}
-      <AnimatePresence>
+        {/* Add Student Modal */}
         {showAddStudentModal && (
-          <>
+          <motion.div
+            variants={backdropVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isDarkMode ? 'bg-black/80 backdrop-blur-sm' : 'bg-black/50'}`}
+            onClick={() => setShowAddStudentModal(false)}
+          >
             <motion.div
-              className="fixed inset-0 bg-black bg-opacity-50 z-40"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={backdropVariants}
-              onClick={() => setShowAddStudentModal(false)}
-            ></motion.div>
-            <motion.div
-              className="fixed inset-0 flex items-center justify-center z-50 p-4"
-              initial="initial"
-              animate="animate"
-              exit="exit"
               variants={modalVariants}
+              className={`p-6 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col ${isDarkMode ? 'bg-slate-800 text-slate-100 border border-slate-700' : 'bg-white text-slate-900'}`}
+              onClick={(e) => e.stopPropagation()}
             >
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full">
-                <div className="flex justify-between items-center border-b dark:border-slate-700 p-4">
-                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Schüler hinzufügen</h3>
-                  <button
-                    onClick={() => setShowAddStudentModal(false)}
-                    className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
+              {/* Modal content for Add Student */}
+              <div className={`flex justify-between items-center pb-3 mb-4 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+                <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`}>Schüler hinzufügen</h3>
+                <button
+                  className={`${isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'} transition-colors`}
+                  onClick={() => setShowAddStudentModal(false)}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              {/* Student Form */}
+              <div className="space-y-3 flex-grow overflow-y-auto pr-2 -mr-2 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-800">
+                <div>
+                  <label htmlFor="studentVorname" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Vorname</label>
+                  <input
+                    id="studentVorname"
+                    name="VORNAME"
+                    type="text"
+                    placeholder="Vorname des Schülers"
+                    value={studentFormData.VORNAME}
+                    onChange={handleStudentFormChange}
+                    className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
+                  />
                 </div>
-                <div className="p-4">
-                  {/* Add Student Form fields */}
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Vorname</label>
-                    <input
-                      type="text"
-                      name="VORNAME"
-                      value={studentFormData.VORNAME}
-                      onChange={handleStudentFormChange}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-sky-500 focus:border-sky-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-                      required
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nachname</label>
-                    <input
-                      type="text"
-                      name="NACHNAME"
-                      value={studentFormData.NACHNAME}
-                      onChange={handleStudentFormChange}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-sky-500 focus:border-sky-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-                      required
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Geburtsdatum</label>
-                    <input
-                      type="date"
-                      name="GEBURTSDATUM"
-                      value={studentFormData.GEBURTSDATUM}
-                      onChange={handleStudentFormChange}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-sky-500 focus:border-sky-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Geschlecht</label>
-                    <select
-                      name="GESCHLECHT"
-                      value={studentFormData.GESCHLECHT}
-                      onChange={handleStudentFormChange}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-sky-500 focus:border-sky-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-                    >
-                      <option value="männlich">Männlich</option>
-                      <option value="weiblich">Weiblich</option>
-                      <option value="divers">Divers</option>
-                    </select>
-                  </div>
-                  {/* TEAMID is assigned via Assign Students Modal, not Add/Edit */}
+                <div>
+                  <label htmlFor="studentNachname" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Nachname</label>
+                  <input
+                    id="studentNachname"
+                    name="NACHNAME"
+                    type="text"
+                    placeholder="Nachname des Schülers"
+                    value={studentFormData.NACHNAME}
+                    onChange={handleStudentFormChange}
+                    className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
+                  />
                 </div>
-                <div className="flex justify-end bg-gray-50 dark:bg-slate-700/50 p-4 rounded-b-lg">
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg mr-2 hover:bg-gray-300 transition-colors dark:bg-slate-600 dark:text-slate-300 dark:hover:bg-slate-500"
-                    onClick={() => setShowAddStudentModal(false)}
+                <div>
+                  <label htmlFor="studentGeburtsdatum" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Geburtsdatum</label>
+                  <input
+                    id="studentGeburtsdatum"
+                    name="GEBURTSDATUM"
+                    type="date" // Changed to type date for better UX
+                    placeholder="TT.MM.JJJJ"
+                    value={studentFormData.GEBURTSDATUM}
+                    onChange={handleStudentFormChange}
+                    className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50 appearance-none
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="studentGeschlecht" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Geschlecht</label>
+                  <select
+                    id="studentGeschlecht"
+                    name="GESCHLECHT"
+                    value={studentFormData.GESCHLECHT}
+                    onChange={handleStudentFormChange}
+                    className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50 appearance-none
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
                   >
-                    Abbrechen
-                  </button>
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-white bg-sky-600 rounded-lg hover:bg-sky-700 transition-colors shadow-md"
-                    onClick={() => {
-                      handleAddStudent();
-                      triggerHapticFeedback('success');
-                    }}
-                  >
-                    <Save className="w-4 h-4 inline mr-1" />
-                    Speichern
-                  </button>
+                    <option value="männlich">Männlich</option>
+                    <option value="weiblich">Weiblich</option>
+                    <option value="divers">Divers</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="studentKlasse" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Klasse</label>
+                  <input
+                    id="studentKlasse"
+                    name="KLASSE"
+                    type="text"
+                    placeholder="Klasse des Schülers"
+                    value={studentFormData.KLASSE}
+                    onChange={handleStudentFormChange}
+                    className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
+                  />
                 </div>
               </div>
+              <div className="mt-6 pt-4 border-t flex justify-end space-x-3 ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}">
+                <button
+                  type="button"
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                    ${isDarkMode 
+                      ? 'bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600' 
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                    }`}
+                  onClick={() => setShowAddStudentModal(false)}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  className={`px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-sky-500 hover:bg-sky-400 focus:ring-sky-500' 
+                      : 'bg-sky-600 hover:bg-sky-700 focus:ring-sky-600'
+                    }`}
+                  onClick={handleAddStudent}
+                >
+                  Schüler hinzufügen
+                </button>
+              </div>
             </motion.div>
-          </>
+          </motion.div>
         )}
-      </AnimatePresence>
-
-      {/* Edit Student Modal - ADDED */}
-      <AnimatePresence>
+        {/* Edit Student Modal */}
         {showEditStudentModal && currentStudent && (
-          <>
+          <motion.div
+            variants={backdropVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isDarkMode ? 'bg-black/80 backdrop-blur-sm' : 'bg-black/50'}`}
+            onClick={() => setShowEditStudentModal(false)}
+          >
             <motion.div
-              className="fixed inset-0 bg-black bg-opacity-50 z-40"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={backdropVariants}
-              onClick={() => setShowEditStudentModal(false)}
-            ></motion.div>
-            <motion.div
-              className="fixed inset-0 flex items-center justify-center z-50 p-4"
-              initial="initial"
-              animate="animate"
-              exit="exit"
               variants={modalVariants}
+              className={`p-6 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col ${isDarkMode ? 'bg-slate-800 text-slate-100 border border-slate-700' : 'bg-white text-slate-900'}`}
+              onClick={(e) => e.stopPropagation()}
             >
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full">
-                <div className="flex justify-between items-center border-b dark:border-slate-700 p-4">
-                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Schüler bearbeiten</h3>
-                  <button
-                    onClick={() => setShowEditStudentModal(false)}
-                    className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
+              {/* Modal content for Edit Student */}
+              <div className={`flex justify-between items-center pb-3 mb-4 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+                <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`}>Schüler bearbeiten</h3>
+                <button
+                  className={`${isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'} transition-colors`}
+                  onClick={() => setShowEditStudentModal(false)}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              {/* Student Form */}
+              <div className="space-y-3 flex-grow overflow-y-auto pr-2 -mr-2 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-800">
+                <div>
+                  <label htmlFor="editStudentVorname" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Vorname</label>
+                  <input
+                    id="editStudentVorname"
+                    name="VORNAME"
+                    type="text"
+                    placeholder="Vorname des Schülers"
+                    value={studentFormData.VORNAME}
+                    onChange={handleStudentFormChange}
+                    className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
+                  />
                 </div>
-                <div className="p-4">
-                   {/* Edit Student Form fields */}
-                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Vorname</label>
-                    <input
-                      type="text"
-                      name="VORNAME"
-                      value={studentFormData.VORNAME}
-                      onChange={handleStudentFormChange}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-sky-500 focus:border-sky-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-                      required
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Nachname</label>
-                    <input
-                      type="text"
-                      name="NACHNAME"
-                      value={studentFormData.NACHNAME}
-                      onChange={handleStudentFormChange}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-sky-500 focus:border-sky-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-                      required
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Geburtsdatum</label>
-                    <input
-                      type="date"
-                      name="GEBURTSDATUM"
-                      value={studentFormData.GEBURTSDATUM}
-                      onChange={handleStudentFormChange}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-sky-500 focus:border-sky-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Geschlecht</label>
-                    <select
-                      name="GESCHLECHT"
-                      value={studentFormData.GESCHLECHT}
-                      onChange={handleStudentFormChange}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-sky-500 focus:border-sky-500 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-                    >
-                      <option value="männlich">Männlich</option>
-                      <option value="weiblich">Weiblich</option>
-                      <option value="divers">Divers</option>
-                    </select>
-                  </div>
-                   {/* TEAMID is assigned via Assign Students Modal, not Add/Edit */}
+                <div>
+                  <label htmlFor="editStudentNachname" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Nachname</label>
+                  <input
+                    id="editStudentNachname"
+                    name="NACHNAME"
+                    type="text"
+                    placeholder="Nachname des Schülers"
+                    value={studentFormData.NACHNAME}
+                    onChange={handleStudentFormChange}
+                    className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
+                  />
                 </div>
-                <div className="flex justify-end bg-gray-50 dark:bg-slate-700/50 p-4 rounded-b-lg">
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg mr-2 hover:bg-gray-300 transition-colors dark:bg-slate-600 dark:text-slate-300 dark:hover:bg-slate-500"
-                    onClick={() => setShowEditStudentModal(false)}
+                <div>
+                  <label htmlFor="editStudentGeburtsdatum" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Geburtsdatum</label>
+                  <input
+                    id="editStudentGeburtsdatum"
+                    name="GEBURTSDATUM"
+                    type="date" // Changed to type date
+                    placeholder="TT.MM.JJJJ"
+                    value={studentFormData.GEBURTSDATUM}
+                    onChange={handleStudentFormChange}
+                    className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50 appearance-none
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="editStudentGeschlecht" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Geschlecht</label>
+                  <select
+                    id="editStudentGeschlecht"
+                    name="GESCHLECHT"
+                    value={studentFormData.GESCHLECHT}
+                    onChange={handleStudentFormChange}
+                    className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50 appearance-none
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
                   >
-                    Abbrechen
-                  </button>
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition-colors shadow-md"
-                    onClick={() => {
-                      handleEditStudent();
-                      triggerHapticFeedback('success');
-                    }}
+                    <option value="männlich">Männlich</option>
+                    <option value="weiblich">Weiblich</option>
+                    <option value="divers">Divers</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="editStudentKlasse" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Klasse</label>
+                  <input
+                    id="editStudentKlasse"
+                    name="KLASSE"
+                    type="text"
+                    placeholder="Klasse des Schülers"
+                    value={studentFormData.KLASSE}
+                    onChange={handleStudentFormChange}
+                    className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
+                  />
+                </div>
+                 <div>
+                  <label htmlFor="editStudentTeam" className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>Team</label>
+                  <select
+                    id="editStudentTeam"
+                    name="TEAMID"
+                    value={studentFormData.TEAMID || ''} // Handle null or undefined TEAMID
+                    onChange={handleStudentFormChange}
+                    className={`w-full p-2.5 border rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-opacity-50 appearance-none
+                    ${isDarkMode 
+                      ? 'bg-slate-700 border-slate-600 placeholder-slate-500 text-slate-100 focus:ring-sky-500 focus:border-sky-500' 
+                      : 'bg-slate-50 border-slate-300 placeholder-slate-400 text-slate-900 focus:ring-sky-500 focus:border-sky-500'
+                    }`}
                   >
-                    <Save className="w-4 h-4 inline mr-1" />
-                    Speichern
-                  </button>
+                    <option value="">Kein Team</option>
+                    {teams.map(team => (
+                      <option key={team.TEAMID} value={team.TEAMID}>{team.NAME}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
+              <div className="mt-6 pt-4 border-t flex justify-end space-x-3 ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}">
+                <button
+                  type="button"
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                    ${isDarkMode 
+                      ? 'bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600' 
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                    }`}
+                  onClick={() => setShowEditStudentModal(false)}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  className={`px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-sky-500 hover:bg-sky-400 focus:ring-sky-500' 
+                      : 'bg-sky-600 hover:bg-sky-700 focus:ring-sky-600'
+                    }`}
+                  onClick={handleEditStudent}
+                >
+                  Schüler aktualisieren
+                </button>
+              </div>
             </motion.div>
-          </>
+          </motion.div>
         )}
-      </AnimatePresence>
-
-      {/* Delete Student Modal - ADDED */}
-      <AnimatePresence>
+        {/* Delete Student Modal */}
         {showDeleteStudentModal && currentStudent && (
-          <>
+          <motion.div
+            variants={backdropVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isDarkMode ? 'bg-black/80 backdrop-blur-sm' : 'bg-black/50'}`}
+            onClick={() => setShowDeleteStudentModal(false)}
+          >
             <motion.div
-              className="fixed inset-0 bg-black bg-opacity-50 z-40"
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              variants={backdropVariants}
-              onClick={() => setShowDeleteStudentModal(false)}
-            ></motion.div>
-            <motion.div
-              className="fixed inset-0 flex items-center justify-center z-50 p-4"
-              initial="initial"
-              animate="animate"
-              exit="exit"
               variants={modalVariants}
+              className={`p-6 rounded-xl shadow-2xl w-full max-w-md ${isDarkMode ? 'bg-slate-800 text-slate-100 border border-slate-700' : 'bg-white text-slate-900'}`}
+              onClick={(e) => e.stopPropagation()}
             >
-              <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full">
-                <div className="flex justify-between items-center border-b dark:border-slate-700 p-4">
-                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Schüler löschen</h3>
-                  <button
-                    onClick={() => setShowDeleteStudentModal(false)}
-                    className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="p-4">
-                  <p className="text-gray-700 mb-4">
-                    Sind Sie sicher, dass Sie den Schüler "{currentStudent.VORNAME} {currentStudent.NACHNAME}" löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.
-                  </p>
-                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 dark:bg-yellow-900/30 dark:border-yellow-600">
-                    <div className="flex">
-                      <AlertTriangle className="h-5 w-5 text-yellow-400 dark:text-yellow-500 mr-2" />
-                      <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                        Durch das Löschen wird auch die Zuordnung zu einem Team aufgehoben.
-                      </p>
+              {/* Modal content for Delete Student */}
+              <div className={`flex justify-between items-center pb-3 mb-4 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+                <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-red-500' : 'text-red-600'}`}>Schüler löschen</h3>
+                <button
+                  className={`${isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'} transition-colors`}
+                  onClick={() => setShowDeleteStudentModal(false)}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className={`${isDarkMode ? 'text-slate-300' : 'text-slate-600'} text-sm mb-1`}>
+                Sind Sie sicher, dass Sie "<strong>{currentStudent.VORNAME} {currentStudent.NACHNAME}</strong>" löschen möchten?
+              </p>
+              <p className={`${isDarkMode ? 'text-red-400' : 'text-red-500'} text-xs font-semibold`}>
+                Diese Aktion kann nicht rückgängig gemacht werden.
+              </p>
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                    ${isDarkMode 
+                      ? 'bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600' 
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                    }`}
+                  onClick={() => setShowDeleteStudentModal(false)}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  className={`px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-opacity-50
+                    ${isDarkMode 
+                      ? 'bg-red-600 hover:bg-red-500 focus:ring-red-600' 
+                      : 'bg-red-500 hover:bg-red-600 focus:ring-red-500' 
+                    }`}
+                  onClick={handleDeleteStudent}
+                >
+                  Schüler löschen
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+        {/* Assign Students to Team Modal */}
+        {showAssignStudentsModal && currentTeam && (
+          <motion.div
+            variants={backdropVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isDarkMode ? 'bg-black/70' : 'bg-black/50'}`}
+            onClick={() => setShowAssignStudentsModal(false)}
+          >
+            <motion.div
+              variants={modalVariants}
+              className={`p-6 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col ${isDarkMode ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-900'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal content for Assign Students */}
+              <div className={`flex justify-between items-center pb-3 mb-4 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+                <h3 className="text-xl font-semibold">Schüler zuweisen zu Team: {currentTeam.NAME}</h3>
+                <button
+                  className="text-gray-400 hover:text-gray-500"
+                  onClick={() => setShowAssignStudentsModal(false)}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              {/* Student Search and Filter */}
+              <div className="mt-4">
+                <input
+                  type="text"
+                  placeholder="Suche nach Schüler..."
+                  value={studentSearchQueryInModal}
+                  onChange={(e) => setStudentSearchQueryInModal(e.target.value)}
+                  className={`w-full p-2 border rounded-lg ${isDarkMode ? 'bg-slate-700 text-slate-100' : 'bg-white text-slate-900'}`}
+                />
+              </div>
+              <div className="mt-4">
+                <select
+                  value={selectedClassFilterInModal}
+                  onChange={(e) => setSelectedClassFilterInModal(e.target.value)}
+                  className={`w-full p-2 border rounded-lg ${isDarkMode ? 'bg-slate-700 text-slate-100' : 'bg-white text-slate-900'}`}
+                >
+                  <option value="">Alle Klassen</option>
+                  {uniqueClasses.map(klass => (
+                    <option key={klass} value={klass}>{klass}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Student List */}
+              <div className="mt-4">
+                {filteredStudentsForModal.length > 0 ? (
+                  filteredStudentsForModal.map(student => (
+                    <div key={student.SCHUELERID} className="flex items-center justify-between py-2">
+                      <span>{student.VORNAME} {student.NACHNAME}</span>
+                      <button
+                        onClick={() => {
+                          setCurrentStudent(student);
+                          setShowEditStudentModal(true);
+                        }}
+                        className={`px-2 py-1 rounded ${isDarkMode ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+                      >
+                        Bearbeiten
+                      </button>
                     </div>
-                  </div>
+                  ))
+                ) : (
+                  <p className="text-gray-500">Keine Schüler gefunden.</p>
+                )}
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+                  onClick={() => {
+                    setSelectedStudents(filteredStudentsForModal.map(student => student.SCHUELERID));
+                    handleAssignStudents();
+                    setShowAssignStudentsModal(false);
+                  }}
+                >
+                  Schüler zuweisen
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+        {/* Excel Import Modal */}
+        {showExcelImportModal && (
+          <motion.div
+            variants={backdropVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isDarkMode ? 'bg-black/80 backdrop-blur-sm' : 'bg-black/50'}`}
+            onClick={() => setShowExcelImportModal(false)}
+          >
+            <motion.div
+              variants={modalVariants}
+              className={`p-6 rounded-xl shadow-2xl w-full max-w-lg ${isDarkMode ? 'bg-slate-800 text-slate-100 border border-slate-700' : 'bg-white text-slate-900'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`flex justify-between items-center pb-3 mb-6 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+                <h3 className={`text-2xl font-semibold ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`}>Teilnehmer importieren</h3>
+                <button 
+                  onClick={() => setShowExcelImportModal(false)} 
+                  className={`${isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'} transition-colors`}
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="flex flex-col items-center justify-center w-full">
+                  <label 
+                    htmlFor="dropzone-file" 
+                    className={`flex flex-col items-center justify-center w-full h-48 border-2 rounded-lg cursor-pointer transition-all
+                      ${isDarkMode 
+                        ? 'border-slate-600 bg-slate-700 hover:bg-slate-600/70' 
+                        : 'border-slate-300 bg-slate-50 hover:bg-slate-100'
+                      } ${isDragActive ? (isDarkMode ? 'border-sky-500' : 'border-sky-400') : (isDarkMode ? 'border-dashed' : 'border-dashed')}`}
+                  >
+                    <div {...getRootProps({className: 'dropzone w-full h-full flex flex-col items-center justify-center p-5 text-center'})}>
+                      <input {...getInputProps()} />
+                      <CloudUpload className={`w-12 h-12 mb-3 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`} />
+                      {isDragActive ?
+                        <p className={`text-lg font-semibold ${isDarkMode ? 'text-sky-400' : 'text-sky-500'}`}>Datei hier ablegen...</p> :
+                        <>
+                          <p className={`mb-2 text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}><span className={`font-semibold ${isDarkMode ? 'text-sky-400' : 'text-sky-500'}`}>Klicken zum Hochladen</span> oder Datei hierher ziehen</p>
+                          <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>XLSX oder CSV (MAX. 5MB)</p>
+                        </>
+                      }
+                    </div>
+                  </label>
+                  {importFile && (
+                    <div className={`mt-4 text-sm p-3 rounded-lg w-full flex items-center justify-between
+                                    ${importError ? (isDarkMode ? 'bg-red-900/30 text-red-300 border border-red-700' : 'bg-red-100 text-red-700 border border-red-300') 
+                                                  : (isDarkMode ? 'bg-green-900/30 text-green-300 border border-green-700' : 'bg-green-100 text-green-700 border border-green-300')}`}>
+                      <div className="flex items-center">
+                        {importError ? <AlertTriangle className="w-5 h-5 mr-2" /> : <FileCheck className="w-5 h-5 mr-2" />}
+                        <span>{importFile.name}</span>
+                      </div>
+                      <button onClick={() => setImportFile(null)} className={`${isDarkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'} ml-2`}>
+                        <X className="w-4 h-4"/>
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-end bg-gray-50 dark:bg-slate-700/50 p-4 rounded-b-lg">
+
+                {importError && (
+                  <div className={`text-sm p-3 rounded-lg ${isDarkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700'}`}>
+                    <p className="font-semibold mb-1">Fehler beim Import:</p>
+                    <p>{importError}</p>
+                  </div>
+                )}
+                
+                {importSuccessMessage && (
+                   <div className={`text-sm p-3 rounded-lg ${isDarkMode ? 'bg-green-900/30 text-green-300' : 'bg-green-100 text-green-700'}`}>
+                     {importSuccessMessage}
+                   </div>
+                )}
+
+                <div className="mt-8 pt-6 border-t flex justify-end space-x-3 ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}">
                   <button
                     type="button"
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg mr-2 hover:bg-gray-300 transition-colors dark:bg-slate-600 dark:text-slate-300 dark:hover:bg-slate-500"
-                    onClick={() => setShowDeleteStudentModal(false)}
+                    onClick={() => setShowExcelImportModal(false)}
+                    className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-colors
+                      ${isDarkMode 
+                        ? 'bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600' 
+                        : 'bg-slate-200 hover:bg-slate-300 text-slate-700 border border-slate-300'
+                      }`}
                   >
                     Abbrechen
                   </button>
                   <button
                     type="button"
-                    className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors shadow-md"
-                    onClick={() => {
-                      handleDeleteStudent();
-                      triggerHapticFeedback('error');
-                    }}
+                    onClick={handleExcelImport}
+                    disabled={!importFile || isLoadingImport}
+                    className={`px-6 py-2.5 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center
+                      ${isDarkMode 
+                        ? 'bg-sky-500 hover:bg-sky-400 focus:ring-sky-500 disabled:bg-sky-700/50 disabled:text-sky-400/70' 
+                        : 'bg-sky-600 hover:bg-sky-700 focus:ring-sky-600 disabled:bg-sky-400/50 disabled:text-sky-200/70'
+                      } focus:outline-none focus:ring-2 focus:ring-opacity-50`}
                   >
-                    <Trash2 className="w-4 h-4 inline mr-1" />
-                    Löschen
+                    {isLoadingImport ? (
+                      <>
+                        <Loader2 className="animate-spin -ml-1 mr-3 h-5 w-5" />
+                        Importiere...
+                      </>
+                    ) : (
+                      'Importieren'
+                    )}
                   </button>
                 </div>
               </div>
             </motion.div>
-          </>
+          </motion.div>
         )}
       </AnimatePresence>
     </motion.div>

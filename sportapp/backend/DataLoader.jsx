@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const DataContext = createContext();
 
@@ -11,25 +11,28 @@ export const DataProvider = ({ children }) => {
     schueler: [],
     teamStudents: [],
     studentScores: [],
+    zeitplan: [],
   });
   const [loading, setLoading] = useState(true);
+  const [zeitplanLoading, setZeitplanLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [zeitplanError, setZeitplanError] = useState(null);
 
   const API = import.meta.env.VITE_API_URL;
 
-  const fetchAllData = async () => {
+  const fetchAllData = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`${API}/all`);
-      if (!res.ok) throw new Error(`Fehler beim Laden der Daten: ${res.statusText}`);
+      if (!res.ok) throw new Error(`Fehler beim Laden der allgemeinen Daten: ${res.statusText}`);
       const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'Unbekannter Fehler');
+      if (!json.success) throw new Error(json.error || 'Unbekannter Fehler bei allgemeinen Daten');
 
-      setData(json.data);
-      setError(null);
+      setData(prevData => ({ ...prevData, ...json.data }));
     } catch (err) {
-      console.error('❌ Fehler beim Laden der Daten:', err);
-      setError(err.message || 'Fehler beim Abrufen der Daten');
+      console.error('❌ Fehler beim Laden der allgemeinen Daten:', err);
+      setError(err.message || 'Fehler beim Abrufen der allgemeinen Daten');
       
       // Falls /all nicht funktioniert, versuchen wir, die Daten einzeln zu laden
       try {
@@ -59,7 +62,8 @@ export const DataProvider = ({ children }) => {
           disziplins: disziplinsJson.success ? disziplinsJson.data : [],
           ergebnisse: ergebnisseJson.success ? ergebnisseJson.data : [],
           schueler: studentsJson.success ? studentsJson.data : [],
-          studentScores: ergebnisseJson.success ? ergebnisseJson.data.filter(result => result.SCHUELERID) : []
+          studentScores: ergebnisseJson.success ? ergebnisseJson.data.filter(result => result.SCHUELERID) : [],
+          zeitplan: ergebnisseJson.success ? ergebnisseJson.data.filter(result => result.ZEITPLANID) : []
         });
         
         setError(null);
@@ -70,10 +74,28 @@ export const DataProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API]);
+
+  const fetchZeitplanData = useCallback(async () => {
+    setZeitplanLoading(true);
+    setZeitplanError(null);
+    try {
+      const res = await fetch(`${API}/zeitplan`);
+      if (!res.ok) throw new Error(`Fehler beim Laden des Zeitplans: ${res.statusText}`);
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Unbekannter Fehler beim Laden des Zeitplans');
+      
+      setData(prevData => ({ ...prevData, zeitplan: json.data || [] }));
+    } catch (err) {
+      console.error('❌ Fehler beim Laden des Zeitplans:', err);
+      setZeitplanError(err.message || 'Fehler beim Abrufen des Zeitplans');
+    } finally {
+      setZeitplanLoading(false);
+    }
+  }, [API]);
 
   // Save student points to the database
-  const saveStudentPoints = async (scoreData) => {
+  const saveStudentPoints = useCallback(async (scoreData) => {
     try {
       const response = await fetch(`${API}/studentpoints`, {
         method: 'POST',
@@ -99,11 +121,12 @@ export const DataProvider = ({ children }) => {
       console.error('Error saving student points:', error);
       throw error;
     }
-  };
+  }, [API]);
 
   useEffect(() => {
     fetchAllData();
-  }, []);
+    fetchZeitplanData();
+  }, [fetchAllData, fetchZeitplanData]);
 
   return (
     <DataContext.Provider 
@@ -111,7 +134,10 @@ export const DataProvider = ({ children }) => {
         ...data, 
         loading, 
         error, 
+        zeitplanLoading,
+        zeitplanError,
         refetchData: fetchAllData,
+        fetchZeitplan: fetchZeitplanData,
         saveStudentPoints
       }}
     >

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   Bell, Search, Users, Sun, Moon, X, Plus, Zap, 
@@ -14,6 +14,7 @@ import userIMG from '../assets/user.png';
 const ArtisticLayout = () => {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isDarkMode, setIsDarkMode] = useState(
     localStorage.getItem('sportapp-theme') === 'dark' || 
     (!localStorage.getItem('sportapp-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -29,6 +30,7 @@ const ArtisticLayout = () => {
     const savedState = sessionStorage.getItem('sidebar-expanded');
     return savedState === null ? true : savedState === 'true';
   });
+  const [pageTitle, setPageTitle] = useState('');
   const headerRef = useRef(null);
   
   // Listen for sidebar toggle events
@@ -55,6 +57,28 @@ const ArtisticLayout = () => {
       clearInterval(interval);
     };
   }, [sidebarExpanded]);
+  
+  // Generate page title based on current path
+  useEffect(() => {
+    const path = location.pathname;
+    let title = 'Dashboard'; // Default title
+    if (path === '/') {
+      title = 'Dashboard';
+    } else if (path.startsWith('/participants')) {
+      title = 'Teilnehmer';
+    } else if (path.startsWith('/disziplinen')) {
+      title = 'Disziplinen';
+    } else if (path.startsWith('/ergebnisse')) {
+      title = 'Ergebnisse';
+    } else if (path.startsWith('/zeitplan')) {
+      title = 'Zeitplan';
+    } else if (path.startsWith('/settings')) {
+      title = 'Einstellungen';
+    } else if (path.startsWith('/users')) {
+      title = 'Nutzerverwaltung';
+    }
+    setPageTitle(title);
+  }, [location.pathname]);
   
   // Artistic color palette with harmonious colors
   const colors = {
@@ -340,88 +364,16 @@ const ArtisticLayout = () => {
           ></div>
           
           <div className="h-full px-5 md:px-8 flex items-center justify-between relative">
-            {/* Artistic Search Bar */}
-            <div 
-              className="relative w-full max-w-2xl transition-all duration-300"
-              style={{ transform: searchActive ? 'scale(1.03)' : 'scale(1)' }}
+            {/* Page Title - Dynamic */}
+            <h1 
+              className="text-xl font-light tracking-wide truncate"
+              style={{ color: t.text }}
             >
-              <div 
-                className="flex items-center h-10 rounded-full overflow-hidden transition-all duration-300"
-                style={{
-                  background: t.surface,
-                  border: `1px solid ${searchActive ? colors.primary : t.border}`,
-                  boxShadow: searchActive ? `0 0 0 1px ${colors.primary}30` : 'none'
-                }}
-              >
-                {/* Search Icon */}
-                <div className="pl-4 pr-2">
-                  <Search 
-                    size={16} 
-                    style={{ 
-                      color: searchActive ? colors.primary : t.textSecondary,
-                      transition: 'color 0.3s ease'
-                    }} 
-                  />
-                </div>
-                
-                {/* Search Input */}
-                <input 
-                  type="text" 
-                  placeholder={searchActive ? "Suchen..." : "Tippe '/' um zu suchen..."}
-                  className="h-full flex-1 bg-transparent border-none focus:outline-none text-sm placeholder-opacity-70"
-                  style={{ 
-                    color: t.text,
-                    caretColor: colors.primary
-                  }}
-                  onFocus={() => setSearchActive(true)}
-                  onBlur={() => setSearchActive(false)}
-                />
-                
-                {/* Shortcut Key */}
-                {!searchActive && (
-                  <div 
-                    className="hidden sm:flex items-center mr-2 text-xs"
-                    style={{ color: t.textSecondary }}
-                  >
-                    <div 
-                      className="h-5 w-5 rounded flex items-center justify-center mr-1"
-                      style={{ 
-                        border: `1px solid ${t.borderAccent}`,
-                        background: t.bg
-                      }}
-                    >
-                      <span>/</span>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Voice Search */}
-                <button 
-                  className="h-8 w-8 flex items-center justify-center rounded-full mr-1 transition-all duration-200"
-                  style={{ 
-                    color: t.textSecondary
-                  }}
-                >
-                  <Mic size={15} />
-                </button>
-                
-                {/* AI Search */}
-                <button 
-                  onClick={() => setAiAssistantOpen(true)}
-                  className="h-8 flex items-center justify-center px-3 rounded-full mr-1 transition-all duration-200"
-                  style={{ 
-                    background: aiAssistantOpen ? `${colors.primary}15` : 'transparent',
-                    color: aiAssistantOpen ? colors.primary : t.textSecondary
-                  }}
-                >
-                  <Sparkles size={15} className="mr-1" />
-                  <span className="text-xs font-light">AI</span>
-                </button>
-              </div>
-            </div>
+              {pageTitle}
+            </h1>
             
             {/* Right Side Actions */}
-            <div className="flex items-center ml-4 space-x-3">
+            <div className="flex items-center space-x-3">
               {/* Help Button */}
               <button 
                 className="hidden sm:flex h-9 w-9 items-center justify-center rounded-full transition-all hover:scale-105"
